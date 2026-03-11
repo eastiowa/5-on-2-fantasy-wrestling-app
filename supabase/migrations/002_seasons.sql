@@ -53,6 +53,15 @@ CREATE TABLE public.team_seasons (
 ALTER TABLE public.athletes
   ADD COLUMN season_id UUID REFERENCES public.seasons(id) ON DELETE CASCADE;
 
+-- Unique constraint so upsert on (name, weight, season_id) works correctly
+-- (the old UNIQUE (name, weight) constraint, if any, should be dropped first)
+ALTER TABLE public.athletes
+  DROP CONSTRAINT IF EXISTS athletes_name_weight_key;
+
+CREATE UNIQUE INDEX IF NOT EXISTS athletes_name_weight_season_idx
+  ON public.athletes (name, weight, season_id)
+  WHERE season_id IS NOT NULL;
+
 -- One draft_settings row per season (replaces single-row design)
 ALTER TABLE public.draft_settings
   ADD COLUMN season_id UUID REFERENCES public.seasons(id) ON DELETE CASCADE;

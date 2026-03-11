@@ -20,7 +20,7 @@ export function AthleteUploadForm() {
   const [parseErrors, setParseErrors] = useState<string[]>([])
   const [fileName, setFileName] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [result, setResult] = useState<{ inserted: number; skipped: number } | null>(null)
+  const [result, setResult] = useState<{ inserted: number; skipped: number; season?: string } | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -212,7 +212,8 @@ export function AthleteUploadForm() {
         <div className="flex items-center gap-2 p-4 bg-green-950 border border-green-800 rounded-lg text-green-400">
           <CheckCircle className="w-5 h-5 shrink-0" />
           <span className="text-sm">
-            Successfully added <strong>{result.inserted}</strong> athletes.
+            Successfully added <strong>{result.inserted}</strong> athletes
+            {result.season && <> to <strong>{result.season}</strong></>}.
             {result.skipped > 0 && ` (${result.skipped} duplicates skipped)`}
           </span>
         </div>
