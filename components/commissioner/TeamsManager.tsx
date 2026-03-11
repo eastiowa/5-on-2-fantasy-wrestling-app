@@ -2,36 +2,20 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, Mail, Trash2, GripVertical, Loader2, AlertCircle, CheckCircle, User, Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff, Link2, Copy
+  Plus, Mail, Trash2, Loader2, AlertCircle, CheckCircle, User,
+  Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff, Link2, Copy, ListOrdered
 } from 'lucide-react'
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core'
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 
 interface TeamWithManager {
   id: string
   name: string
   manager_id: string | null
-  draft_position: number | null   // injected from team_seasons by the API
+  draft_position: number | null   // from current season's team_seasons
   created_at: string
   manager: { id: string; display_name: string | null; email: string } | null
 }
 
-function SortableTeamRow({
+function TeamRow({
   team,
   index,
   onDelete,
@@ -50,9 +34,6 @@ function SortableTeamRow({
   onClaim: (id: string) => Promise<void>
   onRelease: (id: string) => Promise<void>
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: team.id })
-
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(team.name)
   const [saving, setSaving] = useState(false)
@@ -60,48 +41,23 @@ function SortableTeamRow({
 
   const isOwnedByCommissioner = team.manager?.id === commissionerId
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
-
   async function commitRename() {
     const trimmed = editName.trim()
-    if (!trimmed || trimmed === team.name) {
-      setEditing(false)
-      setEditName(team.name)
-      return
-    }
+    if (!trimmed || trimmed === team.name) { setEditing(false); setEditName(team.name); return }
     setSaving(true)
     await onRename(team.id, trimmed)
     setSaving(false)
     setEditing(false)
   }
 
-  function cancelEdit() {
-    setEditing(false)
-    setEditName(team.name)
-  }
+  function cancelEdit() { setEditing(false); setEditName(team.name) }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg border border-orange-600/20"
-    >
-      {/* Drag handle */}
-      <button
-        {...attributes}
-        {...listeners}
-        className="text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing"
-      >
-        <GripVertical className="w-4 h-4" />
-      </button>
-
-      {/* Position */}
-      <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-yellow-400 shrink-0">
-        {index + 1}
+    <div className="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg border border-orange-600/20">
+      {/* Draft position badge (display only — set in Season Management) */}
+      <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-yellow-400 shrink-0"
+        title={team.draft_position ? `Draft position ${team.draft_position} (current season)` : 'No draft position set'}>
+        {team.draft_position ?? '—'}
       </div>
 
       {/* Team info */}
@@ -113,25 +69,14 @@ function SortableTeamRow({
               type="text"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename()
-                if (e.key === 'Escape') cancelEdit()
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') cancelEdit() }}
               className="flex-1 px-2 py-1 bg-gray-700 border border-yellow-400/60 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
             />
-            <button
-              onClick={commitRename}
-              disabled={saving}
-              className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50 transition-colors"
-              title="Save"
-            >
+            <button onClick={commitRename} disabled={saving}
+              className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50 transition-colors" title="Save">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             </button>
-            <button
-              onClick={cancelEdit}
-              className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
-              title="Cancel"
-            >
+            <button onClick={cancelEdit} className="p-1 text-gray-500 hover:text-gray-300 transition-colors" title="Cancel">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -161,11 +106,7 @@ function SortableTeamRow({
         {isOwnedByCommissioner ? (
           <button
             disabled={claiming}
-            onClick={async () => {
-              setClaiming(true)
-              await onRelease(team.id)
-              setClaiming(false)
-            }}
+            onClick={async () => { setClaiming(true); await onRelease(team.id); setClaiming(false) }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-yellow-950 text-yellow-400 border border-yellow-800 rounded-lg hover:bg-yellow-900 transition-colors disabled:opacity-50"
             title="Release — stop managing this team"
           >
@@ -175,11 +116,7 @@ function SortableTeamRow({
         ) : (
           <button
             disabled={claiming}
-            onClick={async () => {
-              setClaiming(true)
-              await onClaim(team.id)
-              setClaiming(false)
-            }}
+            onClick={async () => { setClaiming(true); await onClaim(team.id); setClaiming(false) }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-800 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-700 hover:text-yellow-400 transition-colors disabled:opacity-50"
             title="Claim this team as your own"
           >
@@ -195,6 +132,7 @@ function SortableTeamRow({
           <Mail className="w-3 h-3" />
           {team.manager && !isOwnedByCommissioner ? 'Re-invite' : 'Invite Manager'}
         </button>
+
         <button
           onClick={() => onDelete(team.id)}
           className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded"
@@ -213,7 +151,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [newTeamName, setNewTeamName] = useState('')
   const [creating, setCreating] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteTeamId, setInviteTeamId] = useState<string | null>(null)
   const [inviteTeamName, setInviteTeamName] = useState('')
@@ -222,11 +159,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
   const [generatedLink, setGeneratedLink] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  )
 
   const fetchTeams = useCallback(async () => {
     setLoading(true)
@@ -237,34 +169,21 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
         const data = await res.json().catch(() => ({}))
         setFetchError(data.error ?? `Failed to load teams (${res.status})`)
       } else {
-        const data: TeamWithManager[] = await res.json()
-        setTeams(data)
+        setTeams(await res.json())
       }
-    } catch (err) {
+    } catch {
       setFetchError('Network error — could not load teams.')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => {
-    fetchTeams()
-  }, [fetchTeams])
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-
-    const oldIndex = teams.findIndex((t) => t.id === active.id)
-    const newIndex = teams.findIndex((t) => t.id === over.id)
-    setTeams(arrayMove(teams, oldIndex, newIndex))
-  }
+  useEffect(() => { fetchTeams() }, [fetchTeams])
 
   async function handleCreate() {
     if (!newTeamName.trim() || teams.length >= 10) return
     setCreating(true)
     setMessage(null)
-
     const res = await fetch('/api/teams', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -272,32 +191,11 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     })
     const data = await res.json()
     setCreating(false)
-
     if (!res.ok) {
       setMessage({ type: 'error', text: data.error })
     } else {
       setTeams([...teams, { ...data, manager: null }])
       setNewTeamName('')
-    }
-  }
-
-  async function handleSaveOrder() {
-    setSaving(true)
-    setMessage(null)
-
-    const order = teams.map((t, i) => ({ id: t.id, draft_position: i + 1 }))
-    const res = await fetch('/api/teams', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order }),
-    })
-
-    setSaving(false)
-    if (res.ok) {
-      setMessage({ type: 'success', text: 'Draft order saved!' })
-    } else {
-      const data = await res.json()
-      setMessage({ type: 'error', text: data.error })
     }
   }
 
@@ -315,7 +213,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
   async function handleClaim(teamId: string) {
     const res = await fetch(`/api/teams/${teamId}/claim`, { method: 'POST' })
     if (res.ok) {
-      // Refresh so manager info reflects the commissioner
       await fetchTeams()
     } else {
       const data = await res.json().catch(() => ({}))
@@ -360,7 +257,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     if (!inviteEmail.trim() || !inviteTeamId) return
     setInviting(true)
     setMessage(null)
-
     const res = await fetch('/api/teams/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -368,7 +264,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     })
     const data = await res.json()
     setInviting(false)
-
     if (!res.ok) {
       setMessage({ type: 'error', text: data.error })
     } else {
@@ -383,19 +278,13 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     setGeneratingLink(true)
     setGeneratedLink(null)
     setMessage(null)
-
     const res = await fetch('/api/teams/invite', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: inviteEmail.trim(),
-        team_id: inviteTeamId,
-        generate_link_only: true,
-      }),
+      body: JSON.stringify({ email: inviteEmail.trim(), team_id: inviteTeamId, generate_link_only: true }),
     })
     const data = await res.json()
     setGeneratingLink(false)
-
     if (!res.ok) {
       setMessage({ type: 'error', text: data.error })
     } else if (data.link) {
@@ -413,7 +302,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     })
   }
 
-  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -423,7 +311,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     )
   }
 
-  // Fetch error state
   if (fetchError) {
     return (
       <div className="bg-red-950 border border-red-800 rounded-xl p-6 flex items-start gap-3">
@@ -498,7 +385,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             </button>
           </div>
 
-          {/* Email input + action buttons */}
           <div className="flex gap-2 flex-wrap">
             <input
               type="email"
@@ -533,7 +419,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             <strong className="text-gray-400">Get Link</strong> — Generates a link you can share via text, Slack, etc.
           </p>
 
-          {/* Generated link display */}
           {generatedLink && (
             <div className="space-y-2">
               <p className="text-xs text-green-400 font-medium">✓ Invite link generated — share this with the manager:</p>
@@ -548,9 +433,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
                 <button
                   onClick={copyLink}
                   className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                    linkCopied
-                      ? 'bg-green-700 text-green-200'
-                      : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                    linkCopied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
                   }`}
                 >
                   {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
@@ -563,56 +446,46 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
         </div>
       )}
 
-      {/* Teams list with drag-and-drop */}
+      {/* Teams list */}
       {teams.length > 0 ? (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-white">
               Teams <span className="text-gray-500 font-normal text-sm">({teams.length}/10)</span>
             </h3>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={fetchTeams}
-                className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg"
-                title="Refresh teams"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-              <button
-                onClick={handleSaveOrder}
-                disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 text-sm bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg transition-colors"
-              >
-                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                Save Order
-              </button>
-            </div>
+            <button
+              onClick={fetchTeams}
+              className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg"
+              title="Refresh teams"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
           </div>
-          <p className="text-xs text-gray-500">Drag teams to set the snake draft order (position 1 picks first). Hover a team name to rename it.</p>
 
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext items={teams.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-2">
-                {teams.map((team, i) => (
-                  <SortableTeamRow
-                    key={team.id}
-                    team={team}
-                    index={i}
-                    onDelete={handleDelete}
-                    onInvite={openInvite}
-                    onRename={handleRename}
-                    commissionerId={commissionerId}
-                    onClaim={handleClaim}
-                    onRelease={handleRelease}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          {/* Draft order hint */}
+          <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-800/60 rounded-lg border border-orange-600/20 text-xs text-gray-400">
+            <ListOrdered className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
+            <span>
+              The number badge shows each team&apos;s draft position for the current season.
+              To set or change draft order, go to <strong className="text-gray-300">Season Management → Draft Order</strong>.
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {teams.map((team, i) => (
+              <TeamRow
+                key={team.id}
+                team={team}
+                index={i}
+                onDelete={handleDelete}
+                onInvite={openInvite}
+                onRename={handleRename}
+                commissionerId={commissionerId}
+                onClaim={handleClaim}
+                onRelease={handleRelease}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-10 text-center">

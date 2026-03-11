@@ -1,8 +1,8 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -31,7 +31,14 @@ export async function POST(req: Request) {
   if (!team) return NextResponse.json({ error: 'Team not found' }, { status: 404 })
 
   const admin = createAdminClient()
-  const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/invite/callback`
+
+  // Derive the app origin: prefer the explicit env var, then fall back to the
+  // request origin so this works in any deployment without extra config.
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') ||
+    `${req.nextUrl.protocol}//${req.nextUrl.host}`
+
+  const redirectTo = `${appUrl}/invite/accept`
   const userData = { team_id, role: 'team_manager' }
 
   // ── Generate link without sending email ────────────────────────────────────
@@ -43,7 +50,17 @@ export async function POST(req: Request) {
     })
 
     if (linkError) {
+      console.error('[invite/generate-link] Supabase error:', linkError)
       return NextResponse.json({ error: linkError.message }, { status: 500 })
+    }
+
+    const actionLink = linkData?.properties?.action_link
+    if (!actionLink) {
+      console.error('[invite/generate-link] No action_link in response:', JSON.stringify(linkData))
+      return NextResponse.json(
+        { error: 'Supabase did not return an invite link. The email may already have an active account — try "Send Email" instead.' },
+        { status: 500 }
+      )
     }
 
     const invitedUserId = linkData.user?.id
@@ -60,7 +77,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
-      link: linkData.properties?.action_link,
+      link: actionLink,
       message: `Invite link generated for "${team.name}"`,
     })
   }
@@ -72,6 +89,7 @@ export async function POST(req: Request) {
   )
 
   if (inviteError) {
+    console.error('[invite/send-email] Supabase error:', inviteError)
     return NextResponse.json({ error: inviteError.message }, { status: 500 })
   }
 

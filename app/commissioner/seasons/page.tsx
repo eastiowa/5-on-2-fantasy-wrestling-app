@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   CalendarDays, Plus, CheckCircle, AlertCircle, Loader2,
-  ChevronRight, Star, Trash2, Trophy, Clock, Pencil
+  ChevronRight, Star, Trash2, Trophy, Clock, Pencil, ListOrdered, ChevronDown
 } from 'lucide-react'
 import type { Season, TeamSeason } from '@/types'
+import { DraftOrderEditor } from '@/components/commissioner/DraftOrderEditor'
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,10 @@ export default function SeasonsPage() {
   const [editId, setEditId] = useState<string | null>(null)
   const [editLabel, setEditLabel] = useState('')
   const [editYear, setEditYear] = useState<number>(new Date().getFullYear())
+  const [editStatus, setEditStatus] = useState<Season['status']>('setup')
+
+  // draft order panel
+  const [draftOrderOpenId, setDraftOrderOpenId] = useState<string | null>(null)
 
   // history panel
   const [historySeasonId, setHistorySeasonId] = useState<string | null>(null)
@@ -124,18 +129,28 @@ export default function SeasonsPage() {
     load()
   }
 
-  // ── update info (label / year) ─────────────────────────────────────────────
+  // ── update info (label / year / status) ───────────────────────────────────
+  // Sends all three fields in one request — status is always included so there
+  // is no stale-closure comparison that could silently skip a status change.
   async function handleUpdateInfo(id: string) {
     setBusy(id)
     const res = await fetch(`/api/seasons/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update_info', label: editLabel, year: editYear }),
+      body: JSON.stringify({
+        action: 'update_info',
+        label: editLabel,
+        year: editYear,
+        status: editStatus,
+      }),
     })
     const data = await res.json()
     setBusy(null)
-    if (!res.ok) { flash('error', data.error ?? 'Failed to save'); return }
-    flash('success', `Season updated to "${data.label}"`)
+    if (!res.ok) {
+      flash('error', data.error ?? 'Failed to save')
+      return
+    }
+    flash('success', `Season "${data.label}" updated`)
     setEditId(null)
     load()
   }
@@ -360,10 +375,19 @@ export default function SeasonsPage() {
                           onChange={e => setEditYear(Number(e.target.value))}
                           className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-yellow-400 w-24"
                         />
+                        <select
+                          value={editStatus}
+                          onChange={e => setEditStatus(e.target.value as Season['status'])}
+                          className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-yellow-400"
+                        >
+                          {STATUS_ORDER.map(s => (
+                            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                          ))}
+                        </select>
                         <button
                           onClick={() => handleUpdateInfo(season.id)}
                           disabled={isBusy}
-                          className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg text-xs transition-colors"
+                          className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg text-xs transition-colors disabled:opacity-50"
                         >
                           {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
                         </button>
@@ -380,9 +404,14 @@ export default function SeasonsPage() {
                           {STATUS_LABELS[season.status]}
                         </span>
                         <button
-                          onClick={() => { setEditId(season.id); setEditLabel(season.label); setEditYear(season.year) }}
+                          onClick={() => {
+                            setEditId(season.id)
+                            setEditLabel(season.label)
+                            setEditYear(season.year)
+                            setEditStatus(season.status)
+                          }}
                           className="text-gray-600 hover:text-yellow-400 transition-colors"
-                          title="Edit season info"
+                          title="Edit season"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
@@ -420,6 +449,20 @@ export default function SeasonsPage() {
                       </button>
                     )}
 
+                    {/* Draft order toggle — available on all non-complete seasons + complete (read-only) */}
+                    <button
+                      onClick={() => setDraftOrderOpenId(draftOrderOpenId === season.id ? null : season.id)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
+                        draftOrderOpenId === season.id
+                          ? 'bg-orange-950 text-orange-300 border-orange-800'
+                          : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'
+                      }`}
+                    >
+                      <ListOrdered className="w-3 h-3" />
+                      Draft Order
+                      <ChevronDown className={`w-3 h-3 transition-transform ${draftOrderOpenId === season.id ? 'rotate-180' : ''}`} />
+                    </button>
+
                     {/* View history (completed seasons) */}
                     {season.status === 'complete' && (
                       <button
@@ -431,12 +474,13 @@ export default function SeasonsPage() {
                       </button>
                     )}
 
-                    {/* Delete (setup only, non-current) */}
-                    {season.status === 'setup' && !season.is_current && (
+                    {/* Delete — any non-current season */}
+                    {!season.is_current && (
                       <button
                         onClick={() => handleDelete(season.id, season.label)}
                         disabled={isBusy}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/40 hover:bg-red-950 text-red-400 border border-red-900/50 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
+                        title="Delete this season"
                       >
                         <Trash2 className="w-3 h-3" />
                         Delete
@@ -444,6 +488,24 @@ export default function SeasonsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Draft order panel */}
+                {draftOrderOpenId === season.id && (
+                  <div className="border-t border-orange-600/20 bg-gray-950 px-5 py-4">
+                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                      <ListOrdered className="w-4 h-4 text-yellow-400" />
+                      Draft Order — {season.label}
+                      {season.status === 'complete' && (
+                        <span className="ml-2 text-xs font-normal text-gray-500">(read-only — season complete)</span>
+                      )}
+                    </h3>
+                    <DraftOrderEditor
+                      seasonId={season.id}
+                      seasonLabel={season.label}
+                      readOnly={season.status === 'complete'}
+                    />
+                  </div>
+                )}
 
                 {/* Historical standings panel */}
                 {isHistoryOpen && (

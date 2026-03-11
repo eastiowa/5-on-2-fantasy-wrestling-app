@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = await createClient()
 
   // Fetch teams (no draft_position — it lives in team_seasons now)
@@ -12,18 +12,25 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Merge draft_position from the current season's team_seasons
-  const { data: currentSeason } = await supabase
-    .from('seasons')
-    .select('id')
-    .eq('is_current', true)
-    .maybeSingle()
+  // Use explicit season_id from query param, else fall back to current season
+  const qSeasonId = req.nextUrl.searchParams.get('season_id')
 
-  if (currentSeason) {
+  let resolvedSeasonId: string | null = qSeasonId
+
+  if (!resolvedSeasonId) {
+    const { data: currentSeason } = await supabase
+      .from('seasons')
+      .select('id')
+      .eq('is_current', true)
+      .maybeSingle()
+    resolvedSeasonId = currentSeason?.id ?? null
+  }
+
+  if (resolvedSeasonId) {
     const { data: teamSeasons } = await supabase
       .from('team_seasons')
       .select('team_id, draft_position')
-      .eq('season_id', currentSeason.id)
+      .eq('season_id', resolvedSeasonId)
 
     const posMap: Record<string, number | null> = {}
     teamSeasons?.forEach((ts) => { posMap[ts.team_id] = ts.draft_position })
@@ -35,7 +42,7 @@ export async function GET() {
     return NextResponse.json(merged)
   }
 
-  // No current season — return teams without draft_position
+  // No season resolved — return teams without draft_position
   return NextResponse.json((teams ?? []).map((t) => ({ ...t, draft_position: null })))
 }
 
@@ -67,7 +74,7 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  // Save draft order — writes to team_seasons for the current season
+  // Save draft order — writes to team_seasons for the given or current season
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -75,27 +82,46 @@ export async function PUT(req: Request) {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (profile?.role !== 'commissioner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { order }: { order: { id: string; draft_position: number }[] } = await req.json()
+  const { order, season_id: bodySeasonId }: {
+    order: { id: string; draft_position: number }[]
+    season_id?: string
+  } = await req.json()
   if (!Array.isArray(order)) return NextResponse.json({ error: 'order array required' }, { status: 400 })
 
-  // Get current season
-  const { data: currentSeason } = await supabase
-    .from('seasons')
-    .select('id')
-    .eq('is_current', true)
-    .maybeSingle()
+  // Resolve target season: use explicit season_id if provided, else current season
+  let resolvedSeasonId: string | null = bodySeasonId ?? null
 
-  if (!currentSeason) {
+  if (!resolvedSeasonId) {
+    const { data: currentSeason } = await supabase
+      .from('seasons')
+      .select('id')
+      .eq('is_current', true)
+      .maybeSingle()
+    resolvedSeasonId = currentSeason?.id ?? null
+  }
+
+  if (!resolvedSeasonId) {
     return NextResponse.json(
-      { error: 'No active season set. Create a season before saving draft order.' },
+      { error: 'No season specified and no current season set. Create or select a season first.' },
       { status: 400 }
     )
+  }
+
+  // Verify the season exists
+  const { data: season } = await supabase
+    .from('seasons')
+    .select('id, label')
+    .eq('id', resolvedSeasonId)
+    .maybeSingle()
+
+  if (!season) {
+    return NextResponse.json({ error: 'Season not found' }, { status: 404 })
   }
 
   // Upsert into team_seasons
   const upserts = order.map(({ id, draft_position }) => ({
     team_id: id,
-    season_id: currentSeason.id,
+    season_id: resolvedSeasonId,
     draft_position,
   }))
 
@@ -104,5 +130,5 @@ export async function PUT(req: Request) {
     .upsert(upserts, { onConflict: 'team_id,season_id' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, season_label: season.label })
 }

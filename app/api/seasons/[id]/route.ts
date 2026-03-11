@@ -35,8 +35,10 @@ export async function PATCH(
   const { action } = body
 
   // ── update_info ────────────────────────────────────────────────────────────
+  // Accepts: { label, year, status? }
+  // Updating status here avoids a second round-trip from the edit form.
   if (action === 'update_info') {
-    const { label, year } = body
+    const { label, year, status: newStatus } = body
 
     if (!label?.trim()) {
       return NextResponse.json({ error: 'label is required' }, { status: 400 })
@@ -45,8 +47,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'year must be a number >= 2020' }, { status: 400 })
     }
 
+    const validStatuses = ['setup', 'drafting', 'active', 'complete']
+    if (newStatus !== undefined && !validStatuses.includes(newStatus)) {
+      return NextResponse.json(
+        { error: `status must be one of: ${validStatuses.join(', ')}` },
+        { status: 400 }
+      )
+    }
+
     const updates: Record<string, unknown> = { label: label.trim() }
     if (year !== undefined) updates.year = year
+    if (newStatus !== undefined) updates.status = newStatus
 
     const { data, error } = await supabase
       .from('seasons')
@@ -159,23 +170,20 @@ export async function DELETE(
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
 
-  // Safety: only deletable when in setup
+  // Verify the season exists
   const { data: season } = await supabase
     .from('seasons')
-    .select('status, is_current')
+    .select('status, is_current, label')
     .eq('id', id)
     .single()
 
   if (!season) return NextResponse.json({ error: 'Season not found' }, { status: 404 })
-  if (season.status !== 'setup') {
-    return NextResponse.json(
-      { error: 'Only seasons in "setup" status can be deleted' },
-      { status: 409 }
-    )
-  }
+
+  // Guard: refuse to delete the currently-active season to avoid breaking
+  // live draft/scoring. The commissioner must set a different current season first.
   if (season.is_current) {
     return NextResponse.json(
-      { error: 'Cannot delete the current active season' },
+      { error: 'Cannot delete the current active season. Set another season as current first.' },
       { status: 409 }
     )
   }
