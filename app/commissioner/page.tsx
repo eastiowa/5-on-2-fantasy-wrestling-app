@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Users, Upload, ClipboardList, Settings, Megaphone, BarChart3, Shield, Trophy, CalendarDays, UserCog } from 'lucide-react'
+import { Users, Upload, ClipboardList, Settings, Megaphone, BarChart3, Shield, Trophy, CalendarDays, UserCog, Link2 } from 'lucide-react'
 
 export default async function CommissionerPage() {
   const supabase = await createClient()
@@ -25,6 +25,7 @@ export default async function CommissionerPage() {
     { data: currentSeason },
     { count: seasonCount },
     { count: commissionerCount },
+    { count: quickLinkCount },
   ] = await Promise.all([
     supabase.from('athletes').select('*', { count: 'exact', head: true }),
     supabase.from('teams').select('*', { count: 'exact', head: true }),
@@ -33,6 +34,7 @@ export default async function CommissionerPage() {
     supabase.from('seasons').select('id, label, status, year').eq('is_current', true).maybeSingle(),
     supabase.from('seasons').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'commissioner'),
+    supabase.from('quick_links').select('*', { count: 'exact', head: true }),
   ])
 
   const tools = [
@@ -95,6 +97,13 @@ export default async function CommissionerPage() {
       label: 'User Roles',
       description: 'Promote or demote users to commissioner access',
       count: `${commissionerCount ?? 0} commissioner${commissionerCount !== 1 ? 's' : ''}`,
+    },
+    {
+      href: '/commissioner/quick-links',
+      icon: Link2,
+      label: 'Quick Links',
+      description: 'Manage links shown on the standings home page',
+      count: `${quickLinkCount ?? 0} link${quickLinkCount !== 1 ? 's' : ''}`,
     },
   ]
 

@@ -27,6 +27,14 @@ async function getStandings() {
     .order('created_at', { ascending: false })
     .limit(5)
 
+  // Get active quick links
+  const { data: quickLinks } = await supabase
+    .from('quick_links')
+    .select('id, label, url')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
   // Calculate team totals
   const teamTotals: Record<string, number> = {}
   const teamAthleteCount: Record<string, number> = {}
@@ -50,11 +58,15 @@ async function getStandings() {
     .sort((a, b) => b.total_points - a.total_points)
     .map((entry, i) => ({ ...entry, rank: i + 1 }))
 
-  return { standings, announcements: (announcements ?? []) as any[] }
+  return {
+    standings,
+    announcements: (announcements ?? []) as any[],
+    quickLinks: (quickLinks ?? []) as { id: string; label: string; url: string }[],
+  }
 }
 
 export default async function HomePage() {
-  const { standings, announcements } = await getStandings()
+  const { standings, announcements, quickLinks } = await getStandings()
 
   return (
     <div className="space-y-8">
@@ -156,16 +168,34 @@ export default async function HomePage() {
             )}
           </div>
 
-          {/* Quick Links */}
-          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Quick Links</h3>
-            <Link href="/login" className="block text-sm text-yellow-400 hover:text-yellow-300 transition-colors">
-              → Team Manager Login
-            </Link>
-            <a href="#" className="block text-sm text-gray-400 hover:text-gray-300 transition-colors">
-              → NCAA Tournament Bracket
-            </a>
-          </div>
+          {/* Quick Links — managed by Commissioner */}
+          {quickLinks.length > 0 && (
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-3">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Quick Links</h3>
+              {quickLinks.map((ql) => {
+                const isExternal = ql.url.startsWith('http')
+                return isExternal ? (
+                  <a
+                    key={ql.id}
+                    href={ql.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-sm text-yellow-400 hover:text-yellow-300 transition-colors"
+                  >
+                    → {ql.label}
+                  </a>
+                ) : (
+                  <Link
+                    key={ql.id}
+                    href={ql.url}
+                    className="block text-sm text-yellow-400 hover:text-yellow-300 transition-colors"
+                  >
+                    → {ql.label}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     </div>
