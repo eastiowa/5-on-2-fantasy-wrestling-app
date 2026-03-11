@@ -31,14 +31,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Draft is ${draftSettings.status}` }, { status: 400 })
   }
 
-  // Get teams ordered by draft position
-  const { data: teams } = await supabase
-    .from('teams')
-    .select('*')
-    .order('draft_position', { ascending: true })
-
-  if (!teams || teams.length === 0) {
+  // Get teams with draft_position from current season's team_seasons
+  const { data: teamsRaw } = await supabase.from('teams').select('*')
+  if (!teamsRaw || teamsRaw.length === 0) {
     return NextResponse.json({ error: 'No teams configured' }, { status: 400 })
+  }
+
+  const { data: currentSeason } = await supabase
+    .from('seasons').select('id').eq('is_current', true).maybeSingle()
+
+  let teams = teamsRaw.map((t) => ({ ...t, draft_position: null as number | null }))
+  if (currentSeason) {
+    const { data: teamSeasons } = await supabase
+      .from('team_seasons').select('team_id, draft_position').eq('season_id', currentSeason.id)
+    const posMap: Record<string, number | null> = {}
+    teamSeasons?.forEach((ts) => { posMap[ts.team_id] = ts.draft_position })
+    teams = teams
+      .map((t) => ({ ...t, draft_position: posMap[t.id] ?? null }))
+      .sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
   }
 
   // Determine whose turn it is

@@ -26,7 +26,7 @@ interface TeamWithManager {
   id: string
   name: string
   manager_id: string | null
-  draft_position: number | null
+  draft_position: number | null   // injected from team_seasons by the API
   created_at: string
   manager: { id: string; display_name: string | null; email: string } | null
 }

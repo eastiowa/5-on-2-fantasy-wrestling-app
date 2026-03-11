@@ -37,7 +37,7 @@ export async function PATCH(
   if (profile?.role !== 'commissioner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
-  const allowed = ['name', 'draft_position', 'manager_id']
+  const allowed = ['name', 'manager_id']
   const update = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)))
 
   const { data, error } = await supabase.from('teams').update(update).eq('id', id).select().single()
