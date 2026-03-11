@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
 // PATCH /api/users/[id]
@@ -70,8 +71,13 @@ export async function PATCH(
     )
   }
 
-  // ── Apply change ────────────────────────────────────────────────────────────
-  const { data, error } = await supabase
+  // ── Apply change (use admin client to bypass RLS) ───────────────────────────
+  // The session client can't update other users' profiles due to the RLS policy
+  // "Users can update their own profile". The admin client (service role key)
+  // bypasses RLS — authorization is already enforced above.
+  const admin = createAdminClient()
+
+  const { data, error } = await admin
     .from('profiles')
     .update({ role })
     .eq('id', targetId)
