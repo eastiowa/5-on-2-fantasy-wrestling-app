@@ -157,6 +157,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
   const [inviting, setInviting] = useState(false)
   const [generatingLink, setGeneratingLink] = useState(false)
   const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+  const [generatedLinkExpiry, setGeneratedLinkExpiry] = useState<string | null>(null)
   const [linkCopied, setLinkCopied] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -249,6 +250,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     setInviteTeamName(teamName)
     setInviteEmail('')
     setGeneratedLink(null)
+    setGeneratedLinkExpiry(null)
     setLinkCopied(false)
     setMessage(null)
   }
@@ -273,22 +275,28 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     }
   }
 
+  /**
+   * Get Link — uses the custom token system.
+   * No email required — the manager supplies their email on the /join page.
+   */
   async function handleGetLink() {
-    if (!inviteEmail.trim() || !inviteTeamId) return
+    if (!inviteTeamId) return
     setGeneratingLink(true)
     setGeneratedLink(null)
+    setGeneratedLinkExpiry(null)
     setMessage(null)
-    const res = await fetch('/api/teams/invite', {
+    const res = await fetch('/api/invite-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail.trim(), team_id: inviteTeamId, generate_link_only: true }),
+      body: JSON.stringify({ team_id: inviteTeamId }),
     })
     const data = await res.json()
     setGeneratingLink(false)
     if (!res.ok) {
-      setMessage({ type: 'error', text: data.error })
-    } else if (data.link) {
-      setGeneratedLink(data.link)
+      setMessage({ type: 'error', text: data.error ?? 'Failed to generate link' })
+    } else if (data.url) {
+      setGeneratedLink(data.url)
+      setGeneratedLinkExpiry(data.expires_at ?? null)
     } else {
       setMessage({ type: 'error', text: 'No link returned from server' })
     }
@@ -385,43 +393,25 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             </button>
           </div>
 
-          <div className="flex gap-2 flex-wrap">
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => { setInviteEmail(e.target.value); setGeneratedLink(null) }}
-              onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-              placeholder="manager@example.com"
-              className="flex-1 min-w-48 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-            />
-            <button
-              onClick={handleInvite}
-              disabled={inviting || generatingLink || !inviteEmail.trim()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors text-sm"
-              title="Send an invite email directly to the manager"
-            >
-              {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-              Send Email
-            </button>
+          {/* ── Get Link (no email needed) ───────────────────────────── */}
+          <div className="flex items-center gap-3">
             <button
               onClick={handleGetLink}
-              disabled={inviting || generatingLink || !inviteEmail.trim()}
+              disabled={inviting || generatingLink}
               className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/40 text-white font-semibold rounded-lg transition-colors text-sm"
-              title="Generate a link you can share manually (no email sent)"
+              title="Generate a shareable link — manager sets their own email on the join page"
             >
               {generatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
               Get Link
             </button>
+            <p className="text-xs text-gray-500">
+              No email required — manager registers with their own email on the join page.
+            </p>
           </div>
-
-          <p className="text-xs text-gray-500">
-            <strong className="text-gray-400">Send Email</strong> — Supabase sends the invite directly. &nbsp;
-            <strong className="text-gray-400">Get Link</strong> — Generates a link you can share via text, Slack, etc.
-          </p>
 
           {generatedLink && (
             <div className="space-y-2">
-              <p className="text-xs text-green-400 font-medium">✓ Invite link generated — share this with the manager:</p>
+              <p className="text-xs text-green-400 font-medium">✓ Invite link ready — share this with the manager:</p>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -440,9 +430,40 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
                   {linkCopied ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <p className="text-xs text-yellow-600">⚠️ This link expires after one use and is valid for 24 hours.</p>
+              <p className="text-xs text-yellow-600">
+                ⚠️ Single-use link · expires{' '}
+                {generatedLinkExpiry
+                  ? new Date(generatedLinkExpiry).toLocaleDateString()
+                  : 'in 7 days'}
+              </p>
             </div>
           )}
+
+          {/* ── Send Email (Supabase invite, email required) ─────────── */}
+          <div className="border-t border-gray-800 pt-4 space-y-3">
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
+              Or send a Supabase invite email
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
+                placeholder="manager@example.com"
+                className="flex-1 min-w-48 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              />
+              <button
+                onClick={handleInvite}
+                disabled={inviting || !inviteEmail.trim()}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors text-sm"
+                title="Supabase sends the invite email directly"
+              >
+                {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                Send Email
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
