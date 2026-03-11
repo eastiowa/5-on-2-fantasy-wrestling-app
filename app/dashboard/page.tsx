@@ -2,7 +2,10 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { formatPoints } from '@/lib/utils'
 import { WEIGHT_CLASSES } from '@/types'
-import { Trophy, TrendingUp, Users, Clock, Star, Zap, Award } from 'lucide-react'
+import {
+  Trophy, TrendingUp, Users, Clock, Star, Zap, Award,
+  CalendarDays, User, Mail, Crown, History, Medal
+} from 'lucide-react'
 import Link from 'next/link'
 
 export default async function DashboardPage() {
@@ -11,7 +14,6 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Get profile (without circular team→manager join)
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, email, display_name, role, team_id')
@@ -19,7 +21,6 @@ export default async function DashboardPage() {
     .single()
 
   if (!profile) redirect('/login')
-
   if (profile.role === 'commissioner' && !profile.team_id) redirect('/commissioner')
 
   if (!profile.team_id) {
@@ -32,10 +33,9 @@ export default async function DashboardPage() {
     )
   }
 
-  // Fetch team separately to avoid circular FK ambiguity
   const { data: team } = await supabase
     .from('teams')
-    .select('id, name, draft_position')
+    .select('id, name')
     .eq('id', profile.team_id)
     .single()
 
@@ -48,8 +48,33 @@ export default async function DashboardPage() {
     )
   }
 
-  // Fetch this team's draft picks with full athlete + score details
-  const { data: picks } = await supabase
+  // ── Current season ──────────────────────────────────────────────────────────
+  const { data: currentSeason } = await supabase
+    .from('seasons')
+    .select('id, label, status, year')
+    .eq('is_current', true)
+    .maybeSingle()
+
+  // This team's record in the current season (draft position)
+  const { data: currentTeamSeason } = currentSeason
+    ? await supabase
+        .from('team_seasons')
+        .select('draft_position, final_placement, total_points')
+        .eq('team_id', profile.team_id)
+        .eq('season_id', currentSeason.id)
+        .maybeSingle()
+    : { data: null }
+
+  // ── Historical seasons (completed) ─────────────────────────────────────────
+  const { data: pastSeasons } = await supabase
+    .from('team_seasons')
+    .select('final_placement, total_points, season:seasons(id, label, year, status)')
+    .eq('team_id', profile.team_id)
+    .not('final_placement', 'is', null)
+    .order('season(year)', { ascending: false })
+
+  // ── Draft picks (current season scoped if available) ───────────────────────
+  const picksQuery = supabase
     .from('draft_picks')
     .select(`
       id, pick_number, round,
@@ -65,7 +90,10 @@ export default async function DashboardPage() {
     .eq('team_id', profile.team_id)
     .order('pick_number')
 
-  // Build enriched athlete list with aggregated totals
+  if (currentSeason) picksQuery.eq('season_id', currentSeason.id)
+
+  const { data: picks } = await picksQuery
+
   const athletes = (picks ?? []).map((p: any) => {
     const scores: any[] = p.athlete?.scores ?? []
     const totalPoints = scores.reduce((sum: number, s: any) => sum + Number(s.total_points ?? 0), 0)
@@ -90,10 +118,15 @@ export default async function DashboardPage() {
 
   const teamTotal = athletes.reduce((sum, a) => sum + (a.total_points ?? 0), 0)
 
-  // Standings rank
-  const { data: allPicks } = await supabase
-    .from('draft_picks')
-    .select('team_id, athlete:athletes(scores(total_points))')
+  // League rank (current season)
+  const { data: allPicks } = currentSeason
+    ? await supabase
+        .from('draft_picks')
+        .select('team_id, athlete:athletes(scores(total_points))')
+        .eq('season_id', currentSeason.id)
+    : await supabase
+        .from('draft_picks')
+        .select('team_id, athlete:athletes(scores(total_points))')
 
   const teamTotals: Record<string, number> = {}
   ;(allPicks ?? []).forEach((p: any) => {
@@ -102,7 +135,6 @@ export default async function DashboardPage() {
     )
     teamTotals[p.team_id] = (teamTotals[p.team_id] ?? 0) + pts
   })
-
   const allTotals = Object.values(teamTotals).sort((a, b) => b - a)
   const myRank = allTotals.findIndex((t) => t === teamTotals[profile.team_id]) + 1
 
@@ -110,7 +142,7 @@ export default async function DashboardPage() {
   const { data: draftSettings } = await supabase
     .from('draft_settings')
     .select('status, current_pick_number')
-    .single()
+    .maybeSingle()
 
   const weightMap = Object.fromEntries(athletes.map((a: any) => [a.weight, a]))
 
@@ -120,10 +152,18 @@ export default async function DashboardPage() {
     return `${n}${suffixes[n] ?? 'th'}`
   }
 
+  const placementColor = (p: number | null) => {
+    if (p === 1) return 'text-yellow-400'
+    if (p === 2) return 'text-gray-300'
+    if (p === 3) return 'text-orange-400'
+    return 'text-gray-400'
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl">
+
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold text-white">{team.name}</h1>
           <p className="text-gray-400 mt-1">
@@ -141,136 +181,236 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6">
-          <div className="flex items-center gap-3">
-            <Trophy className="w-8 h-8 text-yellow-400" />
-            <div>
-              <div className="text-2xl font-bold text-white">{formatPoints(teamTotal)}</div>
-              <div className="text-sm text-gray-400">Total Points</div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left column — main content */}
+        <div className="lg:col-span-2 space-y-6">
+
+          {/* Stats cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5">
+              <div className="flex items-center gap-3">
+                <Trophy className="w-7 h-7 text-yellow-400 shrink-0" />
+                <div>
+                  <div className="text-2xl font-bold text-white">{formatPoints(teamTotal)}</div>
+                  <div className="text-xs text-gray-400">Total Points</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="w-7 h-7 text-yellow-400 shrink-0" />
+                <div>
+                  <div className="text-2xl font-bold text-white">#{myRank || '—'}</div>
+                  <div className="text-xs text-gray-400">League Rank</div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5">
+              <div className="flex items-center gap-3">
+                <Users className="w-7 h-7 text-yellow-400 shrink-0" />
+                <div>
+                  <div className="text-2xl font-bold text-white">{athletes.length}/10</div>
+                  <div className="text-xs text-gray-400">Athletes Drafted</div>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6">
-          <div className="flex items-center gap-3">
-            <TrendingUp className="w-8 h-8 text-yellow-400" />
-            <div>
-              <div className="text-2xl font-bold text-white">#{myRank || '—'}</div>
-              <div className="text-sm text-gray-400">League Rank</div>
+
+          {/* Roster */}
+          <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+            <div className="px-6 py-4 border-b border-orange-600/30 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">My Roster</h2>
+              {(draftSettings?.status === 'pending' || draftSettings?.status === 'active') && (
+                <Link href="/draft" className="text-sm text-yellow-400 hover:text-yellow-300">
+                  Go to Draft Room →
+                </Link>
+              )}
             </div>
-          </div>
-        </div>
-        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6">
-          <div className="flex items-center gap-3">
-            <Users className="w-8 h-8 text-yellow-400" />
-            <div>
-              <div className="text-2xl font-bold text-white">{athletes.length}/10</div>
-              <div className="text-sm text-gray-400">Athletes Drafted</div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* Roster with score breakdown */}
-      <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
-        <div className="px-6 py-4 border-b border-orange-600/30 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">My Roster</h2>
-          {(draftSettings?.status === 'pending' || draftSettings?.status === 'active') && (
-            <Link href="/draft" className="text-sm text-yellow-400 hover:text-yellow-300">
-              Go to Draft Room →
-            </Link>
-          )}
-        </div>
+            {athletes.length > 0 && (
+              <div className="px-6 py-2 bg-gray-800/50 flex flex-wrap gap-4 text-xs text-gray-500 border-b border-gray-800">
+                <span className="flex items-center gap-1"><Star className="w-3 h-3 text-yellow-400" /> Champ Wins (1pt ea)</span>
+                <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-orange-400" /> Consol Wins (0.5pt ea)</span>
+                <span className="flex items-center gap-1"><Award className="w-3 h-3 text-blue-400" /> Bonus Pts</span>
+                <span className="flex items-center gap-1"><Trophy className="w-3 h-3 text-green-400" /> Placement Pts</span>
+              </div>
+            )}
 
-        {/* Score legend */}
-        {athletes.length > 0 && (
-          <div className="px-6 py-2 bg-gray-800/50 flex flex-wrap gap-4 text-xs text-gray-500 border-b border-gray-800">
-            <span className="flex items-center gap-1"><Star className="w-3 h-3 text-yellow-400" /> Champ Wins (1pt ea)</span>
-            <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-orange-400" /> Consol Wins (0.5pt ea)</span>
-            <span className="flex items-center gap-1"><Award className="w-3 h-3 text-blue-400" /> Bonus Pts</span>
-            <span className="flex items-center gap-1"><Trophy className="w-3 h-3 text-green-400" /> Placement Pts</span>
-          </div>
-        )}
-
-        <div className="divide-y divide-gray-800">
-          {WEIGHT_CLASSES.map((weight) => {
-            const athlete = weightMap[weight] as any
-            return (
-              <div key={weight} className="px-6 py-4">
-                <div className="flex items-start gap-4">
-                  {/* Weight badge */}
-                  <div className="w-16 text-center shrink-0 pt-0.5">
-                    <span className="text-xs font-bold bg-gray-800 text-yellow-400 px-2 py-1 rounded-full">
-                      {weight}
-                    </span>
-                  </div>
-
-                  {athlete ? (
-                    <div className="flex-1 min-w-0">
-                      {/* Athlete header row */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <div className="font-semibold text-white">{athlete.name}</div>
-                          <div className="text-sm text-gray-500">
-                            {athlete.school} · Seed #{athlete.seed}
-                            <span className="ml-2 text-gray-600">· Pick #{athlete.pick_number} (Rd {athlete.round})</span>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <div className="font-bold text-yellow-400 text-lg">
-                            {formatPoints(athlete.total_points)}
-                          </div>
-                          <div className="text-xs text-gray-600">pts total</div>
-                        </div>
+            <div className="divide-y divide-gray-800">
+              {WEIGHT_CLASSES.map((weight) => {
+                const athlete = weightMap[weight] as any
+                return (
+                  <div key={weight} className="px-6 py-4">
+                    <div className="flex items-start gap-4">
+                      <div className="w-16 text-center shrink-0 pt-0.5">
+                        <span className="text-xs font-bold bg-gray-800 text-yellow-400 px-2 py-1 rounded-full">
+                          {weight}
+                        </span>
                       </div>
-
-                      {/* Score breakdown */}
-                      {athlete.total_points > 0 ? (
-                        <div className="mt-2 flex flex-wrap gap-3">
-                          {athlete.champ_wins > 0 && (
-                            <span className="flex items-center gap-1 text-xs bg-yellow-400/10 text-yellow-300 px-2 py-0.5 rounded-full">
-                              <Star className="w-3 h-3" />
-                              {athlete.champ_wins} champ {athlete.champ_wins === 1 ? 'win' : 'wins'}
-                            </span>
-                          )}
-                          {athlete.consol_wins > 0 && (
-                            <span className="flex items-center gap-1 text-xs bg-orange-400/10 text-orange-300 px-2 py-0.5 rounded-full">
-                              <Zap className="w-3 h-3" />
-                              {athlete.consol_wins} consol {athlete.consol_wins === 1 ? 'win' : 'wins'}
-                            </span>
-                          )}
-                          {athlete.bonus_points > 0 && (
-                            <span className="flex items-center gap-1 text-xs bg-blue-400/10 text-blue-300 px-2 py-0.5 rounded-full">
-                              <Award className="w-3 h-3" />
-                              +{formatPoints(athlete.bonus_points)} bonus
-                            </span>
-                          )}
-                          {athlete.placement_points > 0 && (
-                            <span className="flex items-center gap-1 text-xs bg-green-400/10 text-green-300 px-2 py-0.5 rounded-full">
-                              <Trophy className="w-3 h-3" />
-                              {placementLabel(athlete.placement) && `${placementLabel(athlete.placement)} place · `}
-                              +{formatPoints(athlete.placement_points)} placement
-                            </span>
+                      {athlete ? (
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="font-semibold text-white">{athlete.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {athlete.school} · Seed #{athlete.seed}
+                                <span className="ml-2 text-gray-600">· Pick #{athlete.pick_number} (Rd {athlete.round})</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-bold text-yellow-400 text-lg">{formatPoints(athlete.total_points)}</div>
+                              <div className="text-xs text-gray-600">pts total</div>
+                            </div>
+                          </div>
+                          {athlete.total_points > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-3">
+                              {athlete.champ_wins > 0 && (
+                                <span className="flex items-center gap-1 text-xs bg-yellow-400/10 text-yellow-300 px-2 py-0.5 rounded-full">
+                                  <Star className="w-3 h-3" />{athlete.champ_wins} champ {athlete.champ_wins === 1 ? 'win' : 'wins'}
+                                </span>
+                              )}
+                              {athlete.consol_wins > 0 && (
+                                <span className="flex items-center gap-1 text-xs bg-orange-400/10 text-orange-300 px-2 py-0.5 rounded-full">
+                                  <Zap className="w-3 h-3" />{athlete.consol_wins} consol {athlete.consol_wins === 1 ? 'win' : 'wins'}
+                                </span>
+                              )}
+                              {athlete.bonus_points > 0 && (
+                                <span className="flex items-center gap-1 text-xs bg-blue-400/10 text-blue-300 px-2 py-0.5 rounded-full">
+                                  <Award className="w-3 h-3" />+{formatPoints(athlete.bonus_points)} bonus
+                                </span>
+                              )}
+                              {athlete.placement_points > 0 && (
+                                <span className="flex items-center gap-1 text-xs bg-green-400/10 text-green-300 px-2 py-0.5 rounded-full">
+                                  <Trophy className="w-3 h-3" />
+                                  {placementLabel(athlete.placement) && `${placementLabel(athlete.placement)} place · `}
+                                  +{formatPoints(athlete.placement_points)} placement
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="mt-1 text-xs text-gray-600 italic">No scores recorded yet</div>
                           )}
                         </div>
                       ) : (
-                        <div className="mt-1 text-xs text-gray-600 italic">No scores recorded yet</div>
+                        <div className="flex-1 text-gray-600 italic text-sm pt-0.5">
+                          {draftSettings?.status === 'pending' ? 'Draft not started' :
+                           draftSettings?.status === 'active' ? 'Not yet drafted' : '— Empty —'}
+                        </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="flex-1 text-gray-600 italic text-sm pt-0.5">
-                      {draftSettings?.status === 'pending'
-                        ? 'Draft not started'
-                        : draftSettings?.status === 'active'
-                        ? 'Not yet drafted'
-                        : '— Empty —'}
-                    </div>
-                  )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Right column — info sidebar */}
+        <div className="space-y-4">
+
+          {/* User info */}
+          <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5 space-y-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+              <User className="w-3.5 h-3.5" /> My Account
+            </h3>
+            <div className="space-y-2">
+              <div>
+                <div className="text-xs text-gray-500">Display Name</div>
+                <div className="text-sm font-medium text-white mt-0.5">
+                  {profile.display_name ?? <span className="text-gray-500 italic">Not set</span>}
                 </div>
               </div>
-            )
-          })}
+              <div>
+                <div className="text-xs text-gray-500 flex items-center gap-1"><Mail className="w-3 h-3" /> Email</div>
+                <div className="text-sm text-gray-300 mt-0.5 break-all">{profile.email}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500">Role</div>
+                <div className="mt-0.5">
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+                    profile.role === 'commissioner'
+                      ? 'bg-yellow-950 border-yellow-700 text-yellow-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-300'
+                  }`}>
+                    {profile.role === 'commissioner' ? '👑 Commissioner' : 'Team Manager'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Current season */}
+          <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5 space-y-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+              <CalendarDays className="w-3.5 h-3.5" /> Current Season
+            </h3>
+            {currentSeason ? (
+              <div className="space-y-2">
+                <div className="font-semibold text-white text-sm">{currentSeason.label}</div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${
+                    currentSeason.status === 'active'    ? 'bg-green-950 border-green-800 text-green-300' :
+                    currentSeason.status === 'drafting'  ? 'bg-purple-950 border-purple-800 text-purple-300' :
+                    currentSeason.status === 'complete'  ? 'bg-blue-950 border-blue-800 text-blue-300' :
+                                                           'bg-gray-800 border-gray-700 text-gray-300'
+                  }`}>
+                    {currentSeason.status}
+                  </span>
+                </div>
+                {currentTeamSeason?.draft_position && (
+                  <div className="text-xs text-gray-400">
+                    Draft position: <span className="text-white font-semibold">#{currentTeamSeason.draft_position}</span>
+                  </div>
+                )}
+                {currentTeamSeason?.final_placement && (
+                  <div className="text-xs text-gray-400">
+                    Final placement: <span className={`font-semibold ${placementColor(currentTeamSeason.final_placement)}`}>
+                      {placementLabel(currentTeamSeason.final_placement)} place
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No active season.</p>
+            )}
+          </div>
+
+          {/* Season history */}
+          <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5 space-y-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+              <History className="w-3.5 h-3.5" /> Season History
+            </h3>
+            {!pastSeasons || pastSeasons.length === 0 ? (
+              <p className="text-sm text-gray-500">No completed seasons yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {pastSeasons.map((ts: any) => {
+                  const season = ts.season
+                  return (
+                    <div key={`${season?.id}-${ts.final_placement}`} className="flex items-center gap-3">
+                      <div className={`shrink-0 ${placementColor(ts.final_placement)}`}>
+                        {ts.final_placement === 1 ? (
+                          <Crown className="w-4 h-4 fill-current" />
+                        ) : (
+                          <Medal className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-white">{season?.label ?? `Season ${season?.year}`}</div>
+                        <div className={`text-xs ${placementColor(ts.final_placement)}`}>
+                          {placementLabel(ts.final_placement)} place
+                        </div>
+                      </div>
+                      <div className="text-xs font-semibold text-yellow-400 shrink-0">
+                        {Number(ts.total_points).toFixed(1)} pts
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
     </div>
