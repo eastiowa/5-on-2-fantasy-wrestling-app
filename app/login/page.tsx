@@ -63,13 +63,13 @@ export default function LoginPage() {
 
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center mb-6">
             <Image
               src="/logo.png"
               alt="5 on 2 Fantasy Wrestling"
-              width={80}
-              height={80}
-              className="rounded-xl object-contain"
+              width={180}
+              height={180}
+              className="rounded-2xl object-contain"
               priority
             />
           </div>
