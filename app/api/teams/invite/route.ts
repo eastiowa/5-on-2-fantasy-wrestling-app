@@ -43,11 +43,27 @@ export async function POST(req: NextRequest) {
 
   // ── Generate link without sending email ────────────────────────────────────
   if (generate_link_only) {
-    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+    // Attempt 1: with explicit redirectTo (preferred — sends user to onboarding page)
+    let { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
       type: 'invite',
       email: email.trim(),
       options: { redirectTo, data: userData },
     })
+
+    // Attempt 2: if Supabase rejected our redirectTo URL (not whitelisted),
+    // fall back to no redirectTo so Supabase uses its configured Site URL.
+    // The InviteRedirector in the app layout will then catch the hash params
+    // and forward the user to /invite/accept automatically.
+    if (linkError && /redirect/i.test(linkError.message)) {
+      console.warn('[invite/generate-link] redirectTo rejected, retrying without it:', linkError.message)
+      const retry = await admin.auth.admin.generateLink({
+        type: 'invite',
+        email: email.trim(),
+        options: { data: userData },
+      })
+      linkData = retry.data
+      linkError = retry.error
+    }
 
     if (linkError) {
       console.error('[invite/generate-link] Supabase error:', linkError)

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/shared/Navbar'
+import { InviteRedirector } from '@/components/shared/InviteRedirector'
 import { createClient } from '@/lib/supabase/server'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -52,6 +53,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.className} bg-gray-950 text-gray-100 min-h-screen`}>
+        <InviteRedirector />
         <Navbar role={role} hasTeam={hasTeam} currentSeasonLabel={currentSeason?.label ?? null} isBootstrap={isBootstrap} />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {children}
