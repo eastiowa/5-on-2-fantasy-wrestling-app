@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   CalendarDays, Plus, CheckCircle, AlertCircle, Loader2,
-  ChevronRight, Star, Trash2, Trophy, Clock
+  ChevronRight, Star, Trash2, Trophy, Clock, Pencil
 } from 'lucide-react'
 import type { Season, TeamSeason } from '@/types'
 
@@ -37,6 +37,11 @@ export default function SeasonsPage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)   // id of row being mutated
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // inline edit
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editLabel, setEditLabel] = useState('')
+  const [editYear, setEditYear] = useState<number>(new Date().getFullYear())
 
   // history panel
   const [historySeasonId, setHistorySeasonId] = useState<string | null>(null)
@@ -116,6 +121,22 @@ export default function SeasonsPage() {
     setBusy(null)
     if (!res.ok) { flash('error', data.error); return }
     flash('success', `"${data.label}" is now the active season`)
+    load()
+  }
+
+  // ── update info (label / year) ─────────────────────────────────────────────
+  async function handleUpdateInfo(id: string) {
+    setBusy(id)
+    const res = await fetch(`/api/seasons/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update_info', label: editLabel, year: editYear }),
+    })
+    const data = await res.json()
+    setBusy(null)
+    if (!res.ok) { flash('error', data.error ?? 'Failed to save'); return }
+    flash('success', `Season updated to "${data.label}"`)
+    setEditId(null)
     load()
   }
 
@@ -320,15 +341,53 @@ export default function SeasonsPage() {
                     )}
                   </div>
 
-                  {/* Info */}
+                  {/* Info — click pencil to edit inline */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-white">{season.label}</span>
-                      <span className="text-xs text-gray-500">({season.year})</span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_STYLES[season.status]}`}>
-                        {STATUS_LABELS[season.status]}
-                      </span>
-                    </div>
+                    {editId === season.id ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="text"
+                          value={editLabel}
+                          onChange={e => setEditLabel(e.target.value)}
+                          className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-yellow-400 w-48"
+                          placeholder="Season label"
+                        />
+                        <input
+                          type="number"
+                          value={editYear}
+                          min={2020}
+                          max={2099}
+                          onChange={e => setEditYear(Number(e.target.value))}
+                          className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-yellow-400 w-24"
+                        />
+                        <button
+                          onClick={() => handleUpdateInfo(season.id)}
+                          disabled={isBusy}
+                          className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg text-xs transition-colors"
+                        >
+                          {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+                        </button>
+                        <button onClick={() => setEditId(null)}
+                          className="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-white">{season.label}</span>
+                        <span className="text-xs text-gray-500">({season.year})</span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_STYLES[season.status]}`}>
+                          {STATUS_LABELS[season.status]}
+                        </span>
+                        <button
+                          onClick={() => { setEditId(season.id); setEditLabel(season.label); setEditYear(season.year) }}
+                          className="text-gray-600 hover:text-yellow-400 transition-colors"
+                          title="Edit season info"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                     <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       Created {new Date(season.created_at).toLocaleDateString()}

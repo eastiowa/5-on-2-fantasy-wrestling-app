@@ -3,11 +3,12 @@ import { NextResponse } from 'next/server'
 
 // PATCH /api/seasons/[id]
 // Supported actions via body:
-//   { action: 'set_current' }                          — make this the active season
-//   { action: 'set_status', status: SeasonStatus }     — advance lifecycle status
+//   { action: 'update_info', label: string, year: number }  — edit label/year
+//   { action: 'set_current' }                               — make this the active season
+//   { action: 'set_status', status: SeasonStatus }          — advance lifecycle status
 //   { action: 'record_placements',
 //     placements: { team_id: string, final_placement: number, total_points: number }[] }
-//                                                      — write final standings for history
+//                                                           — write final standings for history
 
 export async function PATCH(
   req: Request,
@@ -32,6 +33,36 @@ export async function PATCH(
 
   const body = await req.json()
   const { action } = body
+
+  // ── update_info ────────────────────────────────────────────────────────────
+  if (action === 'update_info') {
+    const { label, year } = body
+
+    if (!label?.trim()) {
+      return NextResponse.json({ error: 'label is required' }, { status: 400 })
+    }
+    if (year !== undefined && (typeof year !== 'number' || year < 2020)) {
+      return NextResponse.json({ error: 'year must be a number >= 2020' }, { status: 400 })
+    }
+
+    const updates: Record<string, unknown> = { label: label.trim() }
+    if (year !== undefined) updates.year = year
+
+    const { data, error } = await supabase
+      .from('seasons')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: `A season for year ${year} already exists` }, { status: 409 })
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json(data)
+  }
 
   // ── set_current ────────────────────────────────────────────────────────────
   if (action === 'set_current') {
