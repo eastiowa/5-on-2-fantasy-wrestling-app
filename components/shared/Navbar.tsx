@@ -29,7 +29,7 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
   }
 
   const navLinks = [
-    { href: '/', label: 'Standings', icon: Trophy },
+    { href: '/', label: 'Dashboard', icon: Trophy },
     ...(role && hasTeam ? [
       { href: '/dashboard', label: 'My Team', icon: LayoutDashboard },
     ] : []),
