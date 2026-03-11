@@ -1,65 +1,173 @@
-import Image from "next/image";
+import { createClient } from '@/lib/supabase/server'
+import { formatPoints, getRankSuffix } from '@/lib/utils'
+import { Trophy, Megaphone, TrendingUp, Users } from 'lucide-react'
+import Link from 'next/link'
+import { Team, Announcement } from '@/types'
 
-export default function Home() {
+export const revalidate = 60 // Revalidate standings every 60 seconds
+
+async function getStandings() {
+  const supabase = await createClient()
+
+  // Get all teams with their managers
+  const { data: teams } = await supabase
+    .from('teams')
+    .select('*, manager:profiles(display_name, email)')
+    .order('name')
+
+  // Get all draft picks with athlete scores
+  const { data: picks } = await supabase
+    .from('draft_picks')
+    .select('team_id, athlete:athletes(id, name, weight, seed, school, scores(total_points))')
+
+  // Get announcements
+  const { data: announcements } = await supabase
+    .from('announcements')
+    .select('*, creator:profiles(display_name)')
+    .order('created_at', { ascending: false })
+    .limit(5)
+
+  // Calculate team totals
+  const teamTotals: Record<string, number> = {}
+  const teamAthleteCount: Record<string, number> = {}
+
+  picks?.forEach((pick) => {
+    const athletePoints = (pick.athlete as any)?.scores?.reduce(
+      (sum: number, s: any) => sum + (s.total_points ?? 0),
+      0
+    ) ?? 0
+    teamTotals[pick.team_id] = (teamTotals[pick.team_id] ?? 0) + athletePoints
+    teamAthleteCount[pick.team_id] = (teamAthleteCount[pick.team_id] ?? 0) + 1
+  })
+
+  // Sort by total points descending
+  const standings = (teams ?? [])
+    .map((team) => ({
+      team: team as Team & { manager: { display_name: string | null; email: string } },
+      total_points: teamTotals[team.id] ?? 0,
+      athletes_drafted: teamAthleteCount[team.id] ?? 0,
+    }))
+    .sort((a, b) => b.total_points - a.total_points)
+    .map((entry, i) => ({ ...entry, rank: i + 1 }))
+
+  return { standings, announcements: (announcements ?? []) as any[] }
+}
+
+export default async function HomePage() {
+  const { standings, announcements } = await getStandings()
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="text-center space-y-2">
+        <div className="flex items-center justify-center gap-3">
+          <Trophy className="w-10 h-10 text-yellow-400" />
+          <h1 className="text-4xl font-bold text-white">5 on 2 Fantasy Wrestling</h1>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <p className="text-gray-400 text-lg">NCAA Tournament Fantasy League — Live Standings</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Standings Table */}
+        <div className="lg:col-span-2">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-800 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-yellow-400" />
+              <h2 className="text-lg font-semibold">League Standings</h2>
+            </div>
+
+            {standings.length === 0 ? (
+              <div className="px-6 py-12 text-center text-gray-500">
+                <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p>No teams yet. The Commissioner will set up the league soon.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-800">
+                {standings.map(({ team, total_points, athletes_drafted, rank }) => (
+                  <Link
+                    key={team.id}
+                    href={`/teams/${team.id}`}
+                    className="flex items-center gap-4 px-6 py-4 hover:bg-gray-800/50 transition-colors group"
+                  >
+                    {/* Rank */}
+                    <div className={`
+                      w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0
+                      ${rank === 1 ? 'bg-yellow-400 text-gray-900' :
+                        rank === 2 ? 'bg-gray-300 text-gray-900' :
+                        rank === 3 ? 'bg-amber-600 text-white' :
+                        'bg-gray-800 text-gray-400'}
+                    `}>
+                      {rank}
+                    </div>
+
+                    {/* Team info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-white group-hover:text-yellow-400 transition-colors truncate">
+                        {team.name}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {team.manager?.display_name ?? team.manager?.email ?? 'No manager'}
+                        {' · '}
+                        {athletes_drafted}/10 athletes drafted
+                      </div>
+                    </div>
+
+                    {/* Points */}
+                    <div className="text-right shrink-0">
+                      <div className="text-xl font-bold text-yellow-400">
+                        {formatPoints(total_points)}
+                      </div>
+                      <div className="text-xs text-gray-500">points</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-      </main>
+
+        {/* Announcements */}
+        <div className="space-y-4">
+          <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-800 flex items-center gap-2">
+              <Megaphone className="w-5 h-5 text-yellow-400" />
+              <h2 className="text-lg font-semibold">Announcements</h2>
+            </div>
+
+            {announcements.length === 0 ? (
+              <div className="px-6 py-8 text-center text-gray-500 text-sm">
+                No announcements yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-800">
+                {announcements.map((a: Announcement & { creator: any }) => (
+                  <div key={a.id} className="px-6 py-4">
+                    <div className="font-medium text-white text-sm">{a.title}</div>
+                    <div className="text-gray-400 text-sm mt-1 leading-relaxed">{a.body}</div>
+                    <div className="text-xs text-gray-600 mt-2">
+                      {a.creator?.display_name ?? 'Commissioner'} ·{' '}
+                      {new Date(a.created_at).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric'
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Links */}
+          <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Quick Links</h3>
+            <Link href="/login" className="block text-sm text-yellow-400 hover:text-yellow-300 transition-colors">
+              → Team Manager Login
+            </Link>
+            <a href="#" className="block text-sm text-gray-400 hover:text-gray-300 transition-colors">
+              → NCAA Tournament Bracket
+            </a>
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }
