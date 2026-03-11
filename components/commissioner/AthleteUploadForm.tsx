@@ -108,12 +108,12 @@ export function AthleteUploadForm() {
   const errorCount = preview.filter((r) => !!r.error).length
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-4">
+    <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6 space-y-4">
       <h3 className="font-semibold text-white">Upload Athlete CSV</h3>
 
       {/* File input */}
       <div
-        className="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center cursor-pointer hover:border-yellow-400/50 transition-colors"
+        className="border-2 border-dashed border-orange-600/40 rounded-lg p-8 text-center cursor-pointer hover:border-orange-500/70 transition-colors"
         onClick={() => fileRef.current?.click()}
       >
         <Upload className="w-8 h-8 text-gray-500 mx-auto mb-2" />

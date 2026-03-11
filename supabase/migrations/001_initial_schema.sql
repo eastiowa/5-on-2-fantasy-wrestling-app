@@ -54,10 +54,14 @@ CREATE TABLE public.draft_settings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'paused', 'complete')) DEFAULT 'pending',
   current_pick_number INTEGER DEFAULT 1,
-  pick_timer_seconds INTEGER DEFAULT 90,
+  pick_timer_seconds INTEGER DEFAULT 1800 CHECK (pick_timer_seconds >= 0 AND pick_timer_seconds <= 7200),
   pick_started_at TIMESTAMPTZ,
   auto_skip_on_timeout BOOLEAN DEFAULT TRUE,
   snake_enabled BOOLEAN DEFAULT TRUE,
+  -- Overnight pause (times in America/Chicago timezone)
+  overnight_pause_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  pause_start_hour INTEGER NOT NULL DEFAULT 22 CHECK (pause_start_hour BETWEEN 0 AND 23),
+  pause_end_hour INTEGER NOT NULL DEFAULT 8  CHECK (pause_end_hour  BETWEEN 0 AND 23),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

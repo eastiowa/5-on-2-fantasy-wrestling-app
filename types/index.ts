@@ -2,6 +2,8 @@ export type UserRole = 'commissioner' | 'team_manager'
 
 export type DraftStatus = 'pending' | 'active' | 'paused' | 'complete'
 
+export type SeasonStatus = 'setup' | 'drafting' | 'active' | 'complete'
+
 export type WinType = 'decision' | 'major_decision' | 'tech_fall' | 'fall' | 'forfeit' | 'default' | 'disqualification'
 
 export const WEIGHT_CLASSES = [125, 133, 141, 149, 157, 165, 174, 184, 197, 285] as const
@@ -28,6 +30,37 @@ export const BONUS_POINTS: Record<WinType, number> = {
   disqualification: 2,
 }
 
+// ============================================================
+// SEASON
+// One row per annual league year. Exactly one may be is_current.
+// ============================================================
+export interface Season {
+  id: string
+  year: number            // e.g. 2025
+  label: string           // e.g. "2024-25 Season"
+  status: SeasonStatus
+  is_current: boolean
+  created_at: string
+}
+
+// ============================================================
+// TEAM SEASON
+// Per-season metadata for each persistent franchise:
+// draft order, final placement, points snapshot.
+// ============================================================
+export interface TeamSeason {
+  id: string
+  team_id: string
+  season_id: string
+  draft_position: number | null   // 1–10, set by commissioner before draft
+  final_placement: number | null  // 1–10, written when season is archived
+  total_points: number            // snapshot at season end
+  created_at: string
+  // joined
+  team?: Team
+  season?: Season
+}
+
 export interface Profile {
   id: string
   email: string
@@ -37,19 +70,25 @@ export interface Profile {
   created_at: string
 }
 
+// Teams are persistent franchises — they exist across all seasons.
+// draft_position is now per-season via TeamSeason.
 export interface Team {
   id: string
   name: string
   manager_id: string | null
-  draft_position: number | null
   created_at: string
   // joined
   manager?: Profile
-  total_points?: number
+  total_points?: number           // current-season running total
+  draft_position?: number | null  // current-season draft position (from team_seasons join)
+  // history
+  team_seasons?: TeamSeason[]
 }
 
+// Athletes are season-specific — uploaded fresh each year.
 export interface Athlete {
   id: string
+  season_id: string
   name: string
   weight: WeightClass
   school: string
@@ -61,8 +100,10 @@ export interface Athlete {
   drafted_by_team?: string
 }
 
+// One draft_settings row per season (keyed by season_id).
 export interface DraftSettings {
   id: string
+  season_id: string
   status: DraftStatus
   current_pick_number: number
   pick_timer_seconds: number
@@ -74,6 +115,7 @@ export interface DraftSettings {
 
 export interface DraftPick {
   id: string
+  season_id: string
   pick_number: number
   round: number
   team_id: string
@@ -86,6 +128,7 @@ export interface DraftPick {
 
 export interface Score {
   id: string
+  season_id: string
   athlete_id: string
   event: string
   championship_wins: number
@@ -101,6 +144,7 @@ export interface Score {
 
 export interface Announcement {
   id: string
+  season_id: string | null  // null = global / permanently pinned
   title: string
   body: string
   created_by: string
@@ -111,6 +155,7 @@ export interface Announcement {
 
 export interface WishlistItem {
   id: string
+  season_id: string
   team_id: string
   athlete_id: string
   rank: number
@@ -121,6 +166,7 @@ export interface WishlistItem {
 
 export interface ChatMessage {
   id: string
+  season_id: string
   sender_id: string | null
   sender_name: string
   sender_role: UserRole | 'system'
@@ -130,11 +176,21 @@ export interface ChatMessage {
   created_at: string
 }
 
+// Current-season standings row
 export interface Standing {
   rank: number
   team: Team
+  season_id: string
   total_points: number
   athletes_drafted: number
+}
+
+// Historical standings for a completed season
+export interface SeasonStanding {
+  season: Season
+  team: Team
+  final_placement: number
+  total_points: number
 }
 
 // Snake draft helper type

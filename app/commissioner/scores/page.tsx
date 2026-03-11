@@ -68,14 +68,12 @@ export default function ScoresPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-yellow-400" />
-          Score Management
-        </h1>
-        <p className="text-gray-400 mt-1">
-          Upload athlete results to update team scores. Uses NCAA Tournament scoring (Advancement + Bonus + Placement).
-        </p>
+      <div className="flex items-center gap-3">
+        <BarChart3 className="w-8 h-8 text-yellow-400 shrink-0" />
+        <div>
+          <h1 className="text-3xl font-bold text-white">Score Management</h1>
+
+        </div>
       </div>
 
       {/* Result */}
@@ -107,7 +105,7 @@ export default function ScoresPage() {
       )}
 
       {/* CSV Upload */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-4">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-white flex items-center gap-2">
             <Upload className="w-4 h-4 text-yellow-400" />
@@ -127,7 +125,7 @@ export default function ScoresPage() {
         </div>
 
         <div
-          className="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:border-yellow-400/50 transition-colors"
+          className="border-2 border-dashed border-orange-600/40 rounded-lg p-6 text-center cursor-pointer hover:border-orange-500/70 transition-colors"
           onClick={() => fileRef.current?.click()}
         >
           <Upload className="w-6 h-6 text-gray-500 mx-auto mb-2" />
@@ -155,7 +153,7 @@ export default function ScoresPage() {
       </div>
 
       {/* Google Sheets Sync */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-4">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6 space-y-4">
         <h3 className="font-semibold text-white flex items-center gap-2">
           <Link2 className="w-4 h-4 text-yellow-400" />
           Sync from Google Sheets
@@ -180,7 +178,7 @@ export default function ScoresPage() {
       </div>
 
       {/* Scoring reference */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-3">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6 space-y-3">
         <h3 className="font-semibold text-white">NCAA Scoring Reference</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
           <div>

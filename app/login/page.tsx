@@ -47,7 +47,7 @@ export default function LoginPage() {
         </div>
 
         {/* Form */}
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-8">
+        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-8">
           <form onSubmit={handleSignIn} className="space-y-5">
             {/* Email */}
             <div>

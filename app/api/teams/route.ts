@@ -5,7 +5,7 @@ export async function GET() {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('teams')
-    .select('*, manager:profiles(id, display_name, email)')
+    .select('*, manager:profiles!manager_id(id, display_name, email)')
     .order('draft_position', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)

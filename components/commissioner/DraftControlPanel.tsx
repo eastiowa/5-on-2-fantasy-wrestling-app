@@ -144,8 +144,8 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
 
       {/* Draft board */}
       {picks.length > 0 && (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-800">
+        <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-orange-600/30">
             <h3 className="font-semibold text-white">Pick History ({picks.length} picks made)</h3>
           </div>
           <div className="overflow-x-auto max-h-96 overflow-y-auto">
@@ -177,8 +177,8 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
 
       {/* Draft order preview */}
       {fullOrder.length > 0 && picks.length === 0 && (
-        <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-800">
+        <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+          <div className="px-6 py-4 border-b border-orange-600/30">
             <h3 className="font-semibold text-white">Draft Order Preview (100 picks)</h3>
           </div>
           <div className="overflow-x-auto max-h-64 overflow-y-auto">

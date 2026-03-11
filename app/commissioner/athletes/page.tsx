@@ -19,21 +19,19 @@ export default async function AthletesPage() {
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Upload className="w-6 h-6 text-yellow-400" />
-          Manage Athletes
-        </h1>
-        <p className="text-gray-400 mt-1">
-          Upload a CSV file to populate the athlete pool. Existing athletes will be preserved unless deleted.
-        </p>
+      <div className="flex items-center gap-3">
+        <Upload className="w-8 h-8 text-yellow-400 shrink-0" />
+        <div>
+          <h1 className="text-3xl font-bold text-white">Manage Athletes</h1>
+
+        </div>
       </div>
 
       {/* Upload form */}
       <AthleteUploadForm />
 
       {/* CSV format reference */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6">
         <h3 className="font-semibold text-white mb-3">Required CSV Format</h3>
         <div className="bg-gray-950 rounded-lg p-4 font-mono text-sm text-gray-300 overflow-x-auto">
           <div className="text-yellow-400">name,weight,school,seed</div>
@@ -49,8 +47,8 @@ export default async function AthletesPage() {
       </div>
 
       {/* Current athletes table */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+        <div className="px-6 py-4 border-b border-orange-600/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-yellow-400" />
             <h2 className="font-semibold text-white">Current Athletes</h2>

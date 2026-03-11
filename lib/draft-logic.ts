@@ -165,3 +165,54 @@ export function formatPickLabel(pickNumber: number): string {
   const { round, positionInRound } = getPickMeta(pickNumber)
   return `Round ${round}, Pick ${positionInRound}`
 }
+
+/**
+ * Returns the current hour (0-23) in America/Chicago timezone.
+ * Works in both Node.js (server) and browser environments.
+ */
+export function getCurrentChicagoHour(): number {
+  return parseInt(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Chicago',
+      hour: 'numeric',
+      hour12: false,
+    }).format(new Date()),
+    10
+  )
+}
+
+/**
+ * Returns true if the draft should currently be paused due to the
+ * overnight pause window (times in America/Chicago timezone).
+ *
+ * Handles windows that cross midnight (e.g. 22 → 8) and same-day
+ * windows (e.g. 2 → 6, unlikely but supported).
+ *
+ * @param overnight_pause_enabled  - feature toggle
+ * @param pause_start_hour         - hour (0-23 Chicago) when pause begins
+ * @param pause_end_hour           - hour (0-23 Chicago) when draft resumes
+ */
+export function isInOvernightPause(
+  overnight_pause_enabled: boolean,
+  pause_start_hour: number,
+  pause_end_hour: number
+): boolean {
+  if (!overnight_pause_enabled) return false
+  const hour = getCurrentChicagoHour()
+  if (pause_start_hour > pause_end_hour) {
+    // Window crosses midnight — e.g. 22 → 8
+    return hour >= pause_start_hour || hour < pause_end_hour
+  }
+  // Same-day window — e.g. 2 → 6
+  return hour >= pause_start_hour && hour < pause_end_hour
+}
+
+/**
+ * Formats an hour integer (0-23) as a readable 12-hour time string.
+ * e.g. 0 → "12:00 AM", 13 → "1:00 PM"
+ */
+export function formatHour(hour: number): string {
+  const h = hour % 12 === 0 ? 12 : hour % 12
+  const period = hour < 12 ? 'AM' : 'PM'
+  return `${h}:00 ${period}`
+}

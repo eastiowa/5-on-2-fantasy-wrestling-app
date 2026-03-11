@@ -124,7 +124,7 @@ export default function InvitePage() {
           )}
         </div>
 
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-8">
+        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-8">
           <form onSubmit={handleSetup} className="space-y-5">
             {/* Display name */}
             <div>

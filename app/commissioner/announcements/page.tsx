@@ -55,16 +55,16 @@ export default function AnnouncementsPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          <Megaphone className="w-6 h-6 text-yellow-400" />
-          Announcements
-        </h1>
-        <p className="text-gray-400 mt-1">Post league-wide announcements visible on the home page.</p>
+      <div className="flex items-center gap-3">
+        <Megaphone className="w-8 h-8 text-yellow-400 shrink-0" />
+        <div>
+          <h1 className="text-3xl font-bold text-white">Announcements</h1>
+
+        </div>
       </div>
 
       {/* Create form */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6">
         <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
           <Plus className="w-4 h-4 text-yellow-400" />
           New Announcement
@@ -114,8 +114,8 @@ export default function AnnouncementsPage() {
       </div>
 
       {/* Existing announcements */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-800">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+        <div className="px-6 py-4 border-b border-orange-600/30">
           <h3 className="font-semibold text-white">Posted Announcements</h3>
         </div>
 

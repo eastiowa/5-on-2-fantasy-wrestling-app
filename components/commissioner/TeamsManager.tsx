@@ -1,9 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { Team } from '@/types'
+import { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, Mail, Trash2, GripVertical, Loader2, AlertCircle, CheckCircle, User
+  Plus, Mail, Trash2, GripVertical, Loader2, AlertCircle, CheckCircle, User, Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff
 } from 'lucide-react'
 import {
   DndContext,
@@ -32,23 +31,34 @@ interface TeamWithManager {
   manager: { id: string; display_name: string | null; email: string } | null
 }
 
-interface TeamsManagerProps {
-  initialTeams: TeamWithManager[]
-}
-
 function SortableTeamRow({
   team,
   index,
   onDelete,
   onInvite,
+  onRename,
+  commissionerId,
+  onClaim,
+  onRelease,
 }: {
   team: TeamWithManager
   index: number
   onDelete: (id: string) => void
   onInvite: (teamId: string, teamName: string) => void
+  onRename: (id: string, newName: string) => Promise<void>
+  commissionerId: string
+  onClaim: (id: string) => Promise<void>
+  onRelease: (id: string) => Promise<void>
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: team.id })
+
+  const [editing, setEditing] = useState(false)
+  const [editName, setEditName] = useState(team.name)
+  const [saving, setSaving] = useState(false)
+  const [claiming, setClaiming] = useState(false)
+
+  const isOwnedByCommissioner = team.manager?.id === commissionerId
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -56,11 +66,29 @@ function SortableTeamRow({
     opacity: isDragging ? 0.5 : 1,
   }
 
+  async function commitRename() {
+    const trimmed = editName.trim()
+    if (!trimmed || trimmed === team.name) {
+      setEditing(false)
+      setEditName(team.name)
+      return
+    }
+    setSaving(true)
+    await onRename(team.id, trimmed)
+    setSaving(false)
+    setEditing(false)
+  }
+
+  function cancelEdit() {
+    setEditing(false)
+    setEditName(team.name)
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg border border-gray-700"
+      className="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg border border-orange-600/20"
     >
       {/* Drag handle */}
       <button
@@ -78,7 +106,47 @@ function SortableTeamRow({
 
       {/* Team info */}
       <div className="flex-1 min-w-0">
-        <div className="font-semibold text-white">{team.name}</div>
+        {editing ? (
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              type="text"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename()
+                if (e.key === 'Escape') cancelEdit()
+              }}
+              className="flex-1 px-2 py-1 bg-gray-700 border border-yellow-400/60 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
+            />
+            <button
+              onClick={commitRename}
+              disabled={saving}
+              className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50 transition-colors"
+              title="Save"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
+              title="Cancel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 group">
+            <div className="font-semibold text-white">{team.name}</div>
+            <button
+              onClick={() => { setEditName(team.name); setEditing(true) }}
+              className="p-0.5 text-gray-600 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-all"
+              title="Rename team"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        )}
         <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
           <User className="w-3 h-3" />
           {team.manager
@@ -89,16 +157,48 @@ function SortableTeamRow({
 
       {/* Actions */}
       <div className="flex items-center gap-2 shrink-0">
+        {/* Commissioner claim / release */}
+        {isOwnedByCommissioner ? (
+          <button
+            disabled={claiming}
+            onClick={async () => {
+              setClaiming(true)
+              await onRelease(team.id)
+              setClaiming(false)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-yellow-950 text-yellow-400 border border-yellow-800 rounded-lg hover:bg-yellow-900 transition-colors disabled:opacity-50"
+            title="Release — stop managing this team"
+          >
+            {claiming ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldOff className="w-3 h-3" />}
+            My Team
+          </button>
+        ) : (
+          <button
+            disabled={claiming}
+            onClick={async () => {
+              setClaiming(true)
+              await onClaim(team.id)
+              setClaiming(false)
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-800 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-700 hover:text-yellow-400 transition-colors disabled:opacity-50"
+            title="Claim this team as your own"
+          >
+            {claiming ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+            Claim
+          </button>
+        )}
+
         <button
           onClick={() => onInvite(team.id, team.name)}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-950 text-blue-400 border border-blue-800 rounded-lg hover:bg-blue-900 transition-colors"
         >
           <Mail className="w-3 h-3" />
-          {team.manager ? 'Re-invite' : 'Invite Manager'}
+          {team.manager && !isOwnedByCommissioner ? 'Re-invite' : 'Invite Manager'}
         </button>
         <button
           onClick={() => onDelete(team.id)}
           className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded"
+          title="Delete team"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -107,8 +207,10 @@ function SortableTeamRow({
   )
 }
 
-export function TeamsManager({ initialTeams }: TeamsManagerProps) {
-  const [teams, setTeams] = useState<TeamWithManager[]>(initialTeams)
+export function TeamsManager({ commissionerId }: { commissionerId: string }) {
+  const [teams, setTeams] = useState<TeamWithManager[]>([])
+  const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [newTeamName, setNewTeamName] = useState('')
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -122,6 +224,29 @@ export function TeamsManager({ initialTeams }: TeamsManagerProps) {
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
+
+  const fetchTeams = useCallback(async () => {
+    setLoading(true)
+    setFetchError(null)
+    try {
+      const res = await fetch('/api/teams')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setFetchError(data.error ?? `Failed to load teams (${res.status})`)
+      } else {
+        const data: TeamWithManager[] = await res.json()
+        setTeams(data)
+      }
+    } catch (err) {
+      setFetchError('Network error — could not load teams.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTeams()
+  }, [fetchTeams])
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
@@ -178,6 +303,44 @@ export function TeamsManager({ initialTeams }: TeamsManagerProps) {
     const res = await fetch(`/api/teams/${teamId}`, { method: 'DELETE' })
     if (res.ok) {
       setTeams(teams.filter((t) => t.id !== teamId))
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setMessage({ type: 'error', text: data.error ?? 'Failed to delete team.' })
+    }
+  }
+
+  async function handleClaim(teamId: string) {
+    const res = await fetch(`/api/teams/${teamId}/claim`, { method: 'POST' })
+    if (res.ok) {
+      // Refresh so manager info reflects the commissioner
+      await fetchTeams()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setMessage({ type: 'error', text: data.error ?? 'Failed to claim team.' })
+    }
+  }
+
+  async function handleRelease(teamId: string) {
+    const res = await fetch(`/api/teams/${teamId}/claim`, { method: 'DELETE' })
+    if (res.ok) {
+      await fetchTeams()
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setMessage({ type: 'error', text: data.error ?? 'Failed to release team.' })
+    }
+  }
+
+  async function handleRename(teamId: string, newName: string) {
+    const res = await fetch(`/api/teams/${teamId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName }),
+    })
+    if (res.ok) {
+      setTeams(teams.map((t) => t.id === teamId ? { ...t, name: newName } : t))
+    } else {
+      const data = await res.json().catch(() => ({}))
+      setMessage({ type: 'error', text: data.error ?? 'Failed to rename team.' })
     }
   }
 
@@ -208,6 +371,36 @@ export function TeamsManager({ initialTeams }: TeamsManagerProps) {
       setInviteTeamId(null)
       setInviteEmail('')
     }
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 animate-spin text-yellow-400 mr-2" />
+        <span className="text-gray-400">Loading teams…</span>
+      </div>
+    )
+  }
+
+  // Fetch error state
+  if (fetchError) {
+    return (
+      <div className="bg-red-950 border border-red-800 rounded-xl p-6 flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <p className="text-red-300 font-semibold">Failed to load teams</p>
+          <p className="text-red-400 text-sm mt-1">{fetchError}</p>
+        </div>
+        <button
+          onClick={fetchTeams}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors shrink-0"
+        >
+          <RefreshCw className="w-3 h-3" />
+          Retry
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -287,20 +480,31 @@ export function TeamsManager({ initialTeams }: TeamsManagerProps) {
       )}
 
       {/* Teams list with drag-and-drop */}
-      {teams.length > 0 && (
+      {teams.length > 0 ? (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-white">Draft Order</h3>
-            <button
-              onClick={handleSaveOrder}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 text-sm bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg transition-colors"
-            >
-              {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-              Save Order
-            </button>
+            <h3 className="font-semibold text-white">
+              Teams <span className="text-gray-500 font-normal text-sm">({teams.length}/10)</span>
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchTeams}
+                className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg"
+                title="Refresh teams"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleSaveOrder}
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg transition-colors"
+              >
+                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                Save Order
+              </button>
+            </div>
           </div>
-          <p className="text-xs text-gray-500">Drag teams to set the snake draft order (position 1 picks first).</p>
+          <p className="text-xs text-gray-500">Drag teams to set the snake draft order (position 1 picks first). Hover a team name to rename it.</p>
 
           <DndContext
             sensors={sensors}
@@ -316,11 +520,19 @@ export function TeamsManager({ initialTeams }: TeamsManagerProps) {
                     index={i}
                     onDelete={handleDelete}
                     onInvite={openInvite}
+                    onRename={handleRename}
+                    commissionerId={commissionerId}
+                    onClaim={handleClaim}
+                    onRelease={handleRelease}
                   />
                 ))}
               </div>
             </SortableContext>
           </DndContext>
+        </div>
+      ) : (
+        <div className="bg-gray-900 rounded-xl border border-gray-800 p-10 text-center">
+          <p className="text-gray-500 text-sm">No teams yet. Add your first team above.</p>
         </div>
       )}
     </div>

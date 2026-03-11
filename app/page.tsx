@@ -70,8 +70,8 @@ export default async function HomePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Standings Table */}
         <div className="lg:col-span-2">
-          <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-800 flex items-center gap-2">
+          <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+            <div className="px-6 py-4 border-b border-orange-600/30 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-yellow-400" />
               <h2 className="text-lg font-semibold">League Standings</h2>
             </div>
@@ -128,8 +128,8 @@ export default async function HomePage() {
 
         {/* Announcements */}
         <div className="space-y-4">
-          <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-800 flex items-center gap-2">
+          <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+            <div className="px-6 py-4 border-b border-orange-600/30 flex items-center gap-2">
               <Megaphone className="w-5 h-5 text-yellow-400" />
               <h2 className="text-lg font-semibold">Announcements</h2>
             </div>

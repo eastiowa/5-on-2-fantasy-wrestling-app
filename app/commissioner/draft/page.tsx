@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { DraftControlPanel } from '@/components/commissioner/DraftControlPanel'
+import { ClipboardList } from 'lucide-react'
 
 export default async function CommissionerDraftPage() {
   const supabase = await createClient()
@@ -18,9 +19,12 @@ export default async function CommissionerDraftPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Draft Control</h1>
-        <p className="text-gray-400 mt-1">Start, pause, or override the live snake draft.</p>
+      <div className="flex items-center gap-3">
+        <ClipboardList className="w-8 h-8 text-yellow-400 shrink-0" />
+        <div>
+          <h1 className="text-3xl font-bold text-white">Draft Control</h1>
+
+        </div>
       </div>
       <DraftControlPanel
         initialSettings={settings as any}

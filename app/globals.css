@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* ── Navy palette (replaces default gray scale) ── */
+  --color-gray-950: #08121e;
+  --color-gray-900: #0d1e35;
+  --color-gray-800: #162d4a;
+  --color-gray-700: #1f3c60;
+  --color-gray-600: #2e4f7a;
+  --color-gray-500: #5a7898;
+  --color-gray-400: #8aa4be;
+  --color-gray-300: #b4c8da;
+  --color-gray-200: #d0e0ec;
+  --color-gray-100: #e8f0f8;
+
+  /* ── Logo gold (replaces yellow) ── */
+  --color-yellow-50:  #fffbeb;
+  --color-yellow-100: #fef3c7;
+  --color-yellow-200: #fde68a;
+  --color-yellow-300: #ffc048;
+  --color-yellow-400: #f5a623;
+  --color-yellow-500: #e08d00;
+
+  /* ── Logo orange-red ── */
+  --color-orange-400: #f07030;
+  --color-orange-500: #e85c1e;
+  --color-orange-600: #d94c1a;
+  --color-orange-700: #b83c10;
+  --color-orange-800: #8c2c08;
+  --color-orange-900: #5c1c04;
+  --color-orange-950: #3a1002;
+
+  /* ── Amber matches logo gold too ── */
+  --color-amber-400: #f5a623;
+  --color-amber-300: #ffc048;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background-color: #08121e;
+    color: #f0f4f8;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

@@ -54,7 +54,7 @@ export default async function TeamPage({ params }: PageProps) {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white">{team.name}</h1>
@@ -71,8 +71,8 @@ export default async function TeamPage({ params }: PageProps) {
       </div>
 
       {/* Roster by weight class */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-800 flex items-center gap-2">
+      <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
+        <div className="px-6 py-4 border-b border-orange-600/30 flex items-center gap-2">
           <Weight className="w-5 h-5 text-yellow-400" />
           <h2 className="text-lg font-semibold">Roster</h2>
           <span className="text-sm text-gray-500 ml-1">({athletes.length}/10 athletes)</span>
