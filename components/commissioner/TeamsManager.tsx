@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, Mail, Trash2, GripVertical, Loader2, AlertCircle, CheckCircle, User, Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff
+  Plus, Mail, Trash2, GripVertical, Loader2, AlertCircle, CheckCircle, User, Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff, Link2, Copy
 } from 'lucide-react'
 import {
   DndContext,
@@ -218,6 +218,9 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
   const [inviteTeamId, setInviteTeamId] = useState<string | null>(null)
   const [inviteTeamName, setInviteTeamName] = useState('')
   const [inviting, setInviting] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const sensors = useSensors(
@@ -348,6 +351,8 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     setInviteTeamId(teamId)
     setInviteTeamName(teamName)
     setInviteEmail('')
+    setGeneratedLink(null)
+    setLinkCopied(false)
     setMessage(null)
   }
 
@@ -371,6 +376,41 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
       setInviteTeamId(null)
       setInviteEmail('')
     }
+  }
+
+  async function handleGetLink() {
+    if (!inviteEmail.trim() || !inviteTeamId) return
+    setGeneratingLink(true)
+    setGeneratedLink(null)
+    setMessage(null)
+
+    const res = await fetch('/api/teams/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: inviteEmail.trim(),
+        team_id: inviteTeamId,
+        generate_link_only: true,
+      }),
+    })
+    const data = await res.json()
+    setGeneratingLink(false)
+
+    if (!res.ok) {
+      setMessage({ type: 'error', text: data.error })
+    } else if (data.link) {
+      setGeneratedLink(data.link)
+    } else {
+      setMessage({ type: 'error', text: 'No link returned from server' })
+    }
+  }
+
+  function copyLink() {
+    if (!generatedLink) return
+    navigator.clipboard.writeText(generatedLink).then(() => {
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2500)
+    })
   }
 
   // Loading state
@@ -445,37 +485,81 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
 
       {/* Invite modal */}
       {inviteTeamId && (
-        <div className="bg-gray-900 rounded-xl border border-yellow-400/30 p-6">
-          <h3 className="font-semibold text-white mb-1">
-            Invite Manager — <span className="text-yellow-400">{inviteTeamName}</span>
-          </h3>
-          <p className="text-sm text-gray-400 mb-4">
-            An invite email with a secure account setup link will be sent.
-          </p>
-          <div className="flex gap-3">
+        <div className="bg-gray-900 rounded-xl border border-yellow-400/30 p-6 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="font-semibold text-white">
+              Invite Manager — <span className="text-yellow-400">{inviteTeamName}</span>
+            </h3>
+            <button
+              onClick={() => { setInviteTeamId(null); setGeneratedLink(null) }}
+              className="text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Email input + action buttons */}
+          <div className="flex gap-2 flex-wrap">
             <input
               type="email"
               value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
+              onChange={(e) => { setInviteEmail(e.target.value); setGeneratedLink(null) }}
               onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
               placeholder="manager@example.com"
-              className="flex-1 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
+              className="flex-1 min-w-48 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
             />
             <button
               onClick={handleInvite}
-              disabled={inviting || !inviteEmail.trim()}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors"
+              disabled={inviting || generatingLink || !inviteEmail.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors text-sm"
+              title="Send an invite email directly to the manager"
             >
               {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-              Send Invite
+              Send Email
             </button>
             <button
-              onClick={() => setInviteTeamId(null)}
-              className="px-4 py-2.5 text-gray-400 hover:text-white transition-colors rounded-lg border border-gray-700"
+              onClick={handleGetLink}
+              disabled={inviting || generatingLink || !inviteEmail.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/40 text-white font-semibold rounded-lg transition-colors text-sm"
+              title="Generate a link you can share manually (no email sent)"
             >
-              Cancel
+              {generatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+              Get Link
             </button>
           </div>
+
+          <p className="text-xs text-gray-500">
+            <strong className="text-gray-400">Send Email</strong> — Supabase sends the invite directly. &nbsp;
+            <strong className="text-gray-400">Get Link</strong> — Generates a link you can share via text, Slack, etc.
+          </p>
+
+          {/* Generated link display */}
+          {generatedLink && (
+            <div className="space-y-2">
+              <p className="text-xs text-green-400 font-medium">✓ Invite link generated — share this with the manager:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={generatedLink}
+                  className="flex-1 px-3 py-2 bg-gray-800 border border-green-800 rounded-lg text-xs text-gray-300 focus:outline-none select-all"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  onClick={copyLink}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    linkCopied
+                      ? 'bg-green-700 text-green-200'
+                      : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  }`}
+                >
+                  {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {linkCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p className="text-xs text-yellow-600">⚠️ This link expires after one use and is valid for 24 hours.</p>
+            </div>
+          )}
         </div>
       )}
 
