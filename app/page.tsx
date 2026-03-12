@@ -93,10 +93,29 @@ export default async function HomePage() {
     )
   }
 
-  const [{ standings, announcements, quickLinks }, { data: draftSettings }] = await Promise.all([
+  // Fetch current season id for draft order lookup
+  const { data: currentSeason } = await supabase
+    .from('seasons').select('id').eq('is_current', true).maybeSingle()
+
+  const [{ standings, announcements, quickLinks }, { data: draftSettings }, { data: draftOrderRaw }] = await Promise.all([
     getStandings(),
     supabase.from('draft_settings').select('status, draft_start_date').maybeSingle(),
+    currentSeason
+      ? supabase
+          .from('team_seasons')
+          .select('draft_position, team:teams(id, name)')
+          .eq('season_id', currentSeason.id)
+          .not('draft_position', 'is', null)
+          .order('draft_position', { ascending: true })
+          .limit(3)
+      : Promise.resolve({ data: [] }),
   ])
+
+  // Top 3 teams in draft order
+  type DraftSlot = { draft_position: number; team: { id: string; name: string } | null }
+  const top3: DraftSlot[] = ((draftOrderRaw ?? []) as unknown as DraftSlot[])
+    .filter((r) => r.team)
+    .slice(0, 3)
 
   const showCountdown =
     draftSettings?.status === 'pending' &&
@@ -116,15 +135,39 @@ export default async function HomePage() {
 
       {/* Draft countdown banner */}
       {showCountdown && (
-        <div className="bg-gray-900 border border-yellow-400/30 rounded-xl px-6 py-5 flex items-center justify-between gap-6 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Trophy className="w-6 h-6 text-yellow-400 shrink-0" />
-            <div>
-              <div className="font-bold text-white text-lg">Draft Coming Up!</div>
-              <div className="text-sm text-gray-400">Get your wishlist ready before the draft begins.</div>
+        <div className="bg-gray-900 border border-yellow-400/30 rounded-xl px-6 py-5 space-y-5">
+          {/* Top row: title + countdown */}
+          <div className="flex items-center justify-between gap-6 flex-wrap">
+            <div className="flex items-center gap-3">
+              <Trophy className="w-6 h-6 text-yellow-400 shrink-0" />
+              <div>
+                <div className="font-bold text-white text-lg">Draft Coming Up!</div>
+                <div className="text-sm text-gray-400">Get your wishlist ready before the draft begins.</div>
+              </div>
             </div>
+            <DraftCountdown draftStartDate={draftSettings!.draft_start_date!} />
           </div>
-          <DraftCountdown draftStartDate={draftSettings!.draft_start_date!} />
+
+          {/* Draft order slots */}
+          {top3.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-yellow-400/10 pt-4">
+              {top3.map((slot, i) => {
+                const labels = [
+                  { label: 'On the Clock', color: 'text-green-400', border: 'border-green-800', bg: 'bg-green-950/40' },
+                  { label: 'Up Next',       color: 'text-yellow-400', border: 'border-yellow-800', bg: 'bg-yellow-950/30' },
+                  { label: 'In the Hole',   color: 'text-gray-400',   border: 'border-gray-700',  bg: 'bg-gray-800/40' },
+                ]
+                const { label, color, border, bg } = labels[i]
+                return (
+                  <div key={slot.team!.id} className={`flex flex-col gap-1 px-4 py-3 rounded-lg border ${bg} ${border}`}>
+                    <span className={`text-xs font-bold uppercase tracking-widest ${color}`}>{label}</span>
+                    <span className="font-semibold text-white text-sm">{slot.team!.name}</span>
+                    <span className="text-xs text-gray-500">Pick #{slot.draft_position}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 
