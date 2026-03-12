@@ -32,23 +32,38 @@ export async function POST(req: Request) {
   const { data: profile } = await supabase.from('profiles').select('role, team_id').eq('id', user.id).single()
   const { athlete_id, team_id: overrideTeamId } = await req.json()
 
-  const teamId = profile?.role === 'commissioner' ? overrideTeamId : profile?.team_id
+  // Commissioners can optionally pass an explicit team_id; otherwise use their own
+  const teamId = (profile?.role === 'commissioner' && overrideTeamId)
+    ? overrideTeamId
+    : profile?.team_id
+
   if (!teamId) return NextResponse.json({ error: 'No team assigned' }, { status: 400 })
+  if (!athlete_id) return NextResponse.json({ error: 'athlete_id is required' }, { status: 400 })
+
+  // Check if already in wishlist (avoids needing a unique DB constraint)
+  const { data: duplicate } = await supabase
+    .from('draft_wishlist')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('athlete_id', athlete_id)
+    .maybeSingle()
+
+  if (duplicate) return NextResponse.json(duplicate)   // already queued — no-op
 
   // Find the next rank
-  const { data: existing } = await supabase
+  const { data: tail } = await supabase
     .from('draft_wishlist')
     .select('rank')
     .eq('team_id', teamId)
     .order('rank', { ascending: false })
     .limit(1)
 
-  const nextRank = (existing?.[0]?.rank ?? 0) + 1
+  const nextRank = (tail?.[0]?.rank ?? 0) + 1
 
   const { data, error } = await supabase
     .from('draft_wishlist')
-    .upsert({ team_id: teamId, athlete_id, rank: nextRank }, { onConflict: 'team_id,athlete_id' })
-    .select()
+    .insert({ team_id: teamId, athlete_id, rank: nextRank })
+    .select('*, athlete:athletes(id, name, weight, seed, school, is_drafted)')
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -250,11 +250,16 @@ export function DraftRoom({
               picking={picking}
               onPick={handlePick}
               onAddToWishlist={async (athleteId: string) => {
-                await fetch('/api/draft/wishlist', {
+                const res = await fetch('/api/draft/wishlist', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ athlete_id: athleteId }),
                 })
+                if (res.ok) {
+                  const item = await res.json()
+                  // Optimistically add to wishlist state so the check icon appears immediately
+                  setWishlist((prev) => prev.some((w) => w.athlete_id === athleteId) ? prev : [...prev, item])
+                }
               }}
               wishlistIds={new Set(wishlist.map((w) => w.athlete_id))}
             />
@@ -279,11 +284,15 @@ export function DraftRoom({
               onPick={handlePick}
               wishlistIds={new Set(wishlist.map((w) => w.athlete_id))}
               onAddToWishlist={async (athleteId: string) => {
-                await fetch('/api/draft/wishlist', {
+                const res = await fetch('/api/draft/wishlist', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ athlete_id: athleteId }),
                 })
+                if (res.ok) {
+                  const item = await res.json()
+                  setWishlist((prev) => prev.some((w) => w.athlete_id === athleteId) ? prev : [...prev, item])
+                }
               }}
             />
           )}
