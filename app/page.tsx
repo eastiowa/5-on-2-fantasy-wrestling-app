@@ -2,7 +2,6 @@ import { createClient } from '@/lib/supabase/server'
 import { formatPoints, getRankSuffix } from '@/lib/utils'
 import { Trophy, Megaphone, TrendingUp, Users } from 'lucide-react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { Team, Announcement } from '@/types'
 
 export const revalidate = 60 // Revalidate standings every 60 seconds
@@ -198,18 +197,6 @@ export default async function HomePage() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* Banner image */}
-      <div className="mt-12 -mx-4 sm:-mx-6 lg:-mx-8">
-        <Image
-          src="/banner.png"
-          alt="5 on 2 Fantasy Wrestling League"
-          width={1320}
-          height={495}
-          className="w-full object-cover"
-          priority={false}
-        />
       </div>
     </div>
   )
