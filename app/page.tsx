@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { formatPoints, getRankSuffix } from '@/lib/utils'
 import { Trophy, Megaphone, TrendingUp, Users } from 'lucide-react'
 import Link from 'next/link'
@@ -66,6 +67,11 @@ async function getStandings() {
 }
 
 export default async function HomePage() {
+  // Require sign-in
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
   const { standings, announcements, quickLinks } = await getStandings()
 
   return (

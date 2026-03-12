@@ -1,10 +1,15 @@
 import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { Trophy, CalendarDays, Medal } from 'lucide-react'
 
 export const revalidate = 60 // revalidate every minute
 
 export default async function PastSeasonsPage() {
   const supabase = await createClient()
+
+  // Require sign-in
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   // Fetch all completed seasons ordered by year desc
   const { data: seasons } = await supabase
