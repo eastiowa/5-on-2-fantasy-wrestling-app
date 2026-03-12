@@ -43,9 +43,19 @@ function InviteAcceptInner() {
 
   useEffect(() => {
     async function verify() {
-      // ── Implicit flow: #access_token=...&type=invite in hash ──────────────
-      // (flowType:'implicit' on the browser client ensures invite links always
-      // use this path rather than the PKCE ?code= path.)
+      // ── Priority 1: existing session (detectSessionInUrl already ran) ─────
+      // The Supabase browser client calls detectSessionInUrl on initialization,
+      // which processes #access_token= hash fragments and clears the hash
+      // BEFORE React useEffects run.  If a session is already present we can
+      // use it directly rather than re-parsing the (now empty) hash.
+      const { data: { session: existingSession } } = await supabase.auth.getSession()
+      if (existingSession?.user) {
+        setInviteEmail(existingSession.user.email ?? null)
+        setVerifying(false)
+        return
+      }
+
+      // ── Priority 2: implicit flow — #access_token= still in hash ─────────
       const hash = typeof window !== 'undefined' ? window.location.hash : ''
       const hashParams = new URLSearchParams(hash.replace(/^#/, ''))
       const accessToken = hashParams.get('access_token')
@@ -53,7 +63,6 @@ function InviteAcceptInner() {
       const type = hashParams.get('type')
 
       if (accessToken && (type === 'invite' || type === 'recovery' || type === 'signup')) {
-        // Establish the session so subsequent API calls are authenticated
         const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken,
@@ -67,7 +76,7 @@ function InviteAcceptInner() {
         return
       }
 
-      // ── PKCE fallback: ?code= still handled if somehow present ────────────
+      // ── Priority 3: PKCE code in query string ─────────────────────────────
       const code = searchParams.get('code')
       if (code) {
         const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
