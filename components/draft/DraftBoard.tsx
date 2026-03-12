@@ -4,6 +4,14 @@ import { DraftPick, Athlete, DraftStatus } from '@/types'
 import { buildFullDraftOrder, getPickMeta } from '@/lib/draft-logic'
 import { cn } from '@/lib/utils'
 
+/** "Easton Kuboushek" → "E. Kuboushek" */
+function fmtName(name: string | undefined): string {
+  if (!name) return ''
+  const parts = name.trim().split(/\s+/)
+  if (parts.length < 2) return parts[0] ?? ''
+  return `${parts[0][0]}. ${parts.slice(1).join(' ')}`
+}
+
 interface DraftBoardProps {
   teams: Array<{ id: string; name: string; draft_position: number | null }>
   picks: Array<DraftPick & { athlete: Athlete }>
@@ -96,11 +104,7 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
                         {pick ? (
                           <div className="space-y-0.5">
                             <div className="font-medium text-white leading-tight truncate max-w-[90px]">
-                              {(() => {
-                                const parts = (pick.athlete?.name ?? '').trim().split(' ')
-                                if (parts.length < 2) return parts[0]
-                                return `${parts[0][0]}. ${parts.slice(1).join(' ')}`
-                              })()}
+                              {fmtName(pick.athlete?.name)}
                             </div>
                             <div className="text-gray-500 text-[10px]">
                               {pick.athlete?.weight} · #{pick.athlete?.seed}
