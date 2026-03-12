@@ -25,9 +25,20 @@ export async function PATCH(
 
   // ── Parse body once ─────────────────────────────────────────────────────────
   const body = await req.json().catch(() => ({}))
-  const { role } = body
+  const { role, team_id } = body
 
-  if (!['commissioner', 'team_manager'].includes(role)) {
+  // team_id-only update (no role change) is also valid
+  const hasRole = role !== undefined
+  const hasTeamId = team_id !== undefined
+
+  if (!hasRole && !hasTeamId) {
+    return NextResponse.json(
+      { error: 'Provide at least one of: role, team_id' },
+      { status: 400 }
+    )
+  }
+
+  if (hasRole && !['commissioner', 'team_manager'].includes(role)) {
     return NextResponse.json(
       { error: 'role must be "commissioner" or "team_manager"' },
       { status: 400 }
@@ -72,16 +83,18 @@ export async function PATCH(
   }
 
   // ── Apply change (use admin client to bypass RLS) ───────────────────────────
-  // The session client can't update other users' profiles due to the RLS policy
-  // "Users can update their own profile". The admin client (service role key)
-  // bypasses RLS — authorization is already enforced above.
   const admin = createAdminClient()
+
+  // Build profile update payload
+  const profileUpdate: Record<string, unknown> = {}
+  if (hasRole) profileUpdate.role = role
+  if (hasTeamId) profileUpdate.team_id = team_id ?? null
 
   const { data, error } = await admin
     .from('profiles')
-    .update({ role })
+    .update(profileUpdate)
     .eq('id', targetId)
-    .select('id, email, display_name, role')
+    .select('id, email, display_name, role, team_id')
     .single()
 
   if (error) {
@@ -89,6 +102,17 @@ export async function PATCH(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // ── Sync teams.manager_id ──────────────────────────────────────────────────
+  if (hasTeamId) {
+    // Clear this user from any team they were previously on
+    await admin.from('teams').update({ manager_id: null }).eq('manager_id', targetId)
+
+    // Assign them to the new team (if team_id is not null)
+    if (team_id) {
+      await admin.from('teams').update({ manager_id: targetId }).eq('id', team_id)
+    }
   }
 
   return NextResponse.json(data)
