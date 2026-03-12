@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Mail, Trash2, Loader2, AlertCircle, CheckCircle, User,
   Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff, Link2, Copy,
-  ListOrdered, ChevronDown, Save
+  ListOrdered, ChevronDown, Save, UserCheck, UserX
 } from 'lucide-react'
 
 interface TeamWithManager {
@@ -123,11 +123,25 @@ function TeamRow({
               </button>
             </div>
           )}
-          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-            <User className="w-3 h-3" />
-            {team.manager
-              ? (team.manager.display_name ?? team.manager.email)
-              : <span className="text-yellow-600">No manager assigned</span>}
+          <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5 flex-wrap">
+            <span className="flex items-center gap-1">
+              <User className="w-3 h-3" />
+              {team.manager
+                ? (team.manager.display_name ?? team.manager.email)
+                : <span className="text-yellow-600">No manager assigned</span>}
+            </span>
+            {/* Registration status badge */}
+            {team.manager && !isOwnedByCommissioner ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-green-950 border border-green-700 text-green-400">
+                <UserCheck className="w-2.5 h-2.5" />
+                Registered
+              </span>
+            ) : !team.manager ? (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-800 border border-gray-700 text-gray-500">
+                <UserX className="w-2.5 h-2.5" />
+                Not Registered
+              </span>
+            ) : null}
           </div>
         </div>
 
