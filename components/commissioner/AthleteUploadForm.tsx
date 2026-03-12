@@ -32,15 +32,32 @@ export function AthleteUploadForm() {
 
     const reader = new FileReader()
     reader.onload = (evt) => {
-      const text = evt.target?.result as string
+      // Strip BOM (\ufeff) added by Excel — it corrupts the first column header
+      const text = (evt.target?.result as string).replace(/^\ufeff/, '')
+
       const parsed = Papa.parse<Record<string, string>>(text, {
         header: true,
         skipEmptyLines: true,
-        transformHeader: (h) => h.trim().toLowerCase(),
+        transformHeader: (h) => h.trim().toLowerCase().replace(/^\ufeff/, ''),
       })
 
       const rows: PreviewRow[] = []
       const errors: string[] = []
+
+      // Surface a helpful message if expected columns are missing entirely
+      const foundHeaders = parsed.meta.fields ?? []
+      const required = ['name', 'weight', 'school', 'seed']
+      const missing = required.filter((c) => !foundHeaders.includes(c))
+      if (missing.length > 0) {
+        errors.push(
+          `CSV column(s) not found: ${missing.join(', ')}. ` +
+          `Found: ${foundHeaders.join(', ')}. ` +
+          `Expected headers: name, weight, school, seed`
+        )
+        setPreview([])
+        setParseErrors(errors)
+        return
+      }
 
       parsed.data.forEach((row, i) => {
         const lineNum = i + 2
