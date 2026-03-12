@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { AthleteUploadForm } from '@/components/commissioner/AthleteUploadForm'
+import { DeleteAthleteButton } from '@/components/commissioner/DeleteAthleteButton'
 import { Upload, Users, CalendarDays } from 'lucide-react'
 import Link from 'next/link'
 
@@ -19,18 +20,15 @@ export default async function AthletesPage() {
     .eq('is_current', true)
     .maybeSingle()
 
-  // Fetch athletes scoped to current season (or all if no season)
-  const athleteQuery = supabase
-    .from('athletes')
-    .select('*')
-    .order('weight', { ascending: true })
-    .order('seed', { ascending: true })
-
-  if (currentSeason) {
-    athleteQuery.eq('season_id', currentSeason.id)
-  }
-
-  const { data: athletes } = await athleteQuery
+  // Fetch athletes scoped to current season
+  const { data: athletes } = currentSeason
+    ? await supabase
+        .from('athletes')
+        .select('*')
+        .eq('season_id', currentSeason.id)
+        .order('weight', { ascending: true })
+        .order('seed', { ascending: true })
+    : { data: [] }
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -151,23 +149,4 @@ export default async function AthletesPage() {
   )
 }
 
-// Small inline client component for delete
-function DeleteAthleteButton({ athleteId }: { athleteId: string }) {
-  return (
-    <form action={`/api/athletes/${athleteId}`} method="POST">
-      <input type="hidden" name="_method" value="DELETE" />
-      <button
-        type="submit"
-        className="text-xs text-red-400 hover:text-red-300 transition-colors"
-        onClick={async (e) => {
-          e.preventDefault()
-          if (!confirm('Remove this athlete?')) return
-          const res = await fetch(`/api/athletes/${athleteId}`, { method: 'DELETE' })
-          if (res.ok) window.location.reload()
-        }}
-      >
-        Remove
-      </button>
-    </form>
-  )
-}
+
