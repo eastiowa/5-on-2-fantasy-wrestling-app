@@ -34,11 +34,27 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'commissioner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const isCommissioner = profile?.role === 'commissioner'
+
+  if (!isCommissioner) {
+    // Non-commissioners can only rename their OWN team
+    const { data: teamCheck } = await supabase
+      .from('teams').select('manager_id').eq('id', id).single()
+    if (!teamCheck || teamCheck.manager_id !== user.id) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
 
   const body = await req.json()
-  const allowed = ['name', 'manager_id']
+
+  // Managers may only change the name; commissioner can also change manager_id
+  const allowed = isCommissioner ? ['name', 'manager_id'] : ['name']
   const update = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)))
+
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
+  }
 
   const { data, error } = await supabase.from('teams').update(update).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

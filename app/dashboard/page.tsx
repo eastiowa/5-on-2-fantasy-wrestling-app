@@ -7,6 +7,7 @@ import {
   CalendarDays, User, Mail, Crown, History, Medal, ChevronDown
 } from 'lucide-react'
 import Link from 'next/link'
+import { TeamNameEditor } from '@/components/shared/TeamNameEditor'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -176,7 +177,7 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">{team.name}</h1>
+          <TeamNameEditor teamId={team.id} initialName={team.name} />
         </div>
         {draftSettings?.status === 'active' && (
           <Link
