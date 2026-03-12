@@ -9,10 +9,9 @@ export async function GET() {
   const { data: profile } = await supabase.from('profiles').select('role, team_id').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
-  const teamId = profile.role === 'commissioner'
-    ? (new URL('http://x?' + (new URLSearchParams({})).toString())).searchParams.get('team_id')
-    : profile.team_id
-
+  // Both team managers and commissioners use their own team_id
+  // A commissioner who has claimed a team will have profile.team_id set
+  const teamId = profile.team_id
   if (!teamId) return NextResponse.json([])
 
   const { data, error } = await supabase

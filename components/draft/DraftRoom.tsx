@@ -277,6 +277,14 @@ export function DraftRoom({
               isMyTurn={isMyTurn && settings.status === 'active'}
               picking={picking}
               onPick={handlePick}
+              wishlistIds={new Set(wishlist.map((w) => w.athlete_id))}
+              onAddToWishlist={async (athleteId: string) => {
+                await fetch('/api/draft/wishlist', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ athlete_id: athleteId }),
+                })
+              }}
             />
           )}
           {activeTab === 'board' && (

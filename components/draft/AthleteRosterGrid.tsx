@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { Athlete, DraftPick, WEIGHT_CLASSES } from '@/types'
 import { cn } from '@/lib/utils'
+import { BookmarkPlus, Check, Loader2 } from 'lucide-react'
 
 interface AthleteRosterGridProps {
   athletes: Athlete[]
@@ -10,6 +12,8 @@ interface AthleteRosterGridProps {
   isMyTurn: boolean
   picking: boolean
   onPick: (athleteId: string) => void
+  wishlistIds: Set<string>
+  onAddToWishlist: (athleteId: string) => Promise<void>
 }
 
 /**
@@ -27,7 +31,17 @@ export function AthleteRosterGrid({
   isMyTurn,
   picking,
   onPick,
+  wishlistIds,
+  onAddToWishlist,
 }: AthleteRosterGridProps) {
+  const [addingWishlist, setAddingWishlist] = useState<string | null>(null)
+
+  async function handleWishlist(e: React.MouseEvent, athleteId: string) {
+    e.stopPropagation()
+    setAddingWishlist(athleteId)
+    await onAddToWishlist(athleteId)
+    setAddingWishlist(null)
+  }
   // Build lookup: athleteMap[weight][seed] = Athlete
   const athleteMap = new Map<number, Map<number, Athlete>>()
   for (const a of athletes) {
@@ -104,37 +118,63 @@ export function AthleteRosterGrid({
                   : undefined
                 const isMyDraftedAthlete = draftedBy?.team_id === userTeamId
 
+                const inWishlist = wishlistIds.has(athlete.id)
+                const isAddingWishlist = addingWishlist === athlete.id
+
                 return (
                   <td key={w} className="px-1 py-1">
-                    <button
-                      onClick={() => canPick && onPick(athlete.id)}
-                      disabled={!canPick}
-                      title={
-                        isDrafted
-                          ? `Drafted by ${draftedBy?.team?.name ?? 'a team'}`
-                          : `${athlete.name} — ${athlete.school}`
-                      }
-                      className={cn(
-                        'w-full text-center rounded px-1 py-1 leading-tight transition-colors',
-                        isDrafted
-                          ? isMyDraftedAthlete
-                            ? 'line-through text-yellow-600/50 bg-yellow-400/5 cursor-default'
-                            : 'line-through text-gray-700 cursor-default'
-                          : myWeightTaken
-                          ? 'text-gray-600 cursor-default'
-                          : canPick
-                          ? 'text-white bg-green-950/60 hover:bg-green-900/80 cursor-pointer ring-1 ring-green-700'
-                          : 'text-gray-300 hover:bg-gray-800 cursor-default'
+                    <div className="relative group">
+                      <button
+                        onClick={() => canPick && onPick(athlete.id)}
+                        disabled={!canPick}
+                        title={
+                          isDrafted
+                            ? `Drafted by ${draftedBy?.team?.name ?? 'a team'}`
+                            : `${athlete.name} — ${athlete.school}`
+                        }
+                        className={cn(
+                          'w-full text-center rounded px-1 py-1 leading-tight transition-colors',
+                          isDrafted
+                            ? isMyDraftedAthlete
+                              ? 'line-through text-yellow-600/50 bg-yellow-400/5 cursor-default'
+                              : 'line-through text-gray-700 cursor-default'
+                            : myWeightTaken
+                            ? 'text-gray-600 cursor-default'
+                            : canPick
+                            ? 'text-white bg-green-950/60 hover:bg-green-900/80 cursor-pointer ring-1 ring-green-700'
+                            : 'text-gray-300 hover:bg-gray-800 cursor-default'
+                        )}
+                      >
+                        {/* Last name only for compactness */}
+                        <span className="block truncate max-w-[72px]">
+                          {athlete.name.split(' ').pop()}
+                        </span>
+                        <span className="block text-[9px] text-gray-500 truncate max-w-[72px]">
+                          {athlete.school}
+                        </span>
+                      </button>
+
+                      {/* Wishlist bookmark — only for undrafted athletes when user has a team */}
+                      {!isDrafted && userTeamId && (
+                        <button
+                          onClick={(e) => !inWishlist && handleWishlist(e, athlete.id)}
+                          disabled={inWishlist || isAddingWishlist}
+                          title={inWishlist ? 'In your queue' : 'Add to queue'}
+                          className={cn(
+                            'absolute top-0 right-0 p-0.5 rounded transition-colors',
+                            inWishlist
+                              ? 'text-yellow-400 opacity-100'
+                              : 'text-gray-600 opacity-0 group-hover:opacity-100 hover:text-yellow-400'
+                          )}
+                        >
+                          {isAddingWishlist
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : inWishlist
+                            ? <Check className="w-3 h-3" />
+                            : <BookmarkPlus className="w-3 h-3" />}
+                        </button>
                       )}
-                    >
-                      {/* Last name only for compactness */}
-                      <span className="block truncate max-w-[72px]">
-                        {athlete.name.split(' ').pop()}
-                      </span>
-                      <span className="block text-[9px] text-gray-500 truncate max-w-[72px]">
-                        {athlete.school}
-                      </span>
-                    </button>
+                    </div>
                   </td>
                 )
               })}
