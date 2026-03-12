@@ -267,7 +267,13 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     const data = await res.json()
     setInviting(false)
     if (!res.ok) {
-      setMessage({ type: 'error', text: data.error })
+      const isRateLimit = /rate.?limit|too many/i.test(data.error ?? '')
+      setMessage({
+        type: 'error',
+        text: isRateLimit
+          ? '⚠️ Supabase email rate limit reached. Use "Get Link" above to share a join link directly — no email needed.'
+          : data.error,
+      })
     } else {
       setMessage({ type: 'success', text: data.message })
       setInviteTeamId(null)
