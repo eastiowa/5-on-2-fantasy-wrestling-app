@@ -29,14 +29,14 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
   }
 
   const navLinks = [
-    { href: '/', label: 'Dashboard', icon: Trophy },
+    ...(role ? [{ href: '/', label: 'Dashboard', icon: Trophy }] : []),
     ...(role && hasTeam ? [
       { href: '/dashboard', label: 'My Team', icon: LayoutDashboard },
     ] : []),
     ...(role ? [
       { href: '/draft', label: 'Draft Room', icon: Users },
     ] : []),
-    { href: '/past-seasons', label: 'Past Seasons', icon: History },
+    ...(role ? [{ href: '/past-seasons', label: 'Past Seasons', icon: History }] : []),
     ...(role === 'commissioner' ? [
       { href: '/commissioner', label: 'Commissioner', icon: Settings },
     ] : []),
