@@ -173,13 +173,18 @@ export function WishlistPanel({
       }))
     }
 
-    // seed: bucket by ranges 1–4, 5–8, 9–12, 13–16, 17+
+    // seed: seeds 1–9 are individual buckets, 10+ grouped together
     const ranges = [
-      { label: 'Seeds 1–4',  min: 1,  max: 4  },
-      { label: 'Seeds 5–8',  min: 5,  max: 8  },
-      { label: 'Seeds 9–12', min: 9,  max: 12 },
-      { label: 'Seeds 13–16', min: 13, max: 16 },
-      { label: 'Seeds 17+',  min: 17, max: Infinity },
+      { label: 'Seed 1',  min: 1,  max: 1  },
+      { label: 'Seed 2',  min: 2,  max: 2  },
+      { label: 'Seed 3',  min: 3,  max: 3  },
+      { label: 'Seed 4',  min: 4,  max: 4  },
+      { label: 'Seed 5',  min: 5,  max: 5  },
+      { label: 'Seed 6',  min: 6,  max: 6  },
+      { label: 'Seed 7',  min: 7,  max: 7  },
+      { label: 'Seed 8',  min: 8,  max: 8  },
+      { label: 'Seed 9',  min: 9,  max: 9  },
+      { label: 'Seeds 10+', min: 10, max: Infinity },
     ]
     return ranges
       .map((r) => ({
