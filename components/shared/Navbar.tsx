@@ -65,7 +65,7 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
                 5 on 2 Fantasy Wrestling
               </span>
               {role && currentSeasonLabel && (
-                <div className="text-xs text-orange-400/80 leading-none mt-0.5">{currentSeasonLabel}</div>
+                <div className="text-xs leading-none mt-0.5" style={{ color: '#0d1e35' }}>{currentSeasonLabel}</div>
               )}
             </div>
             <span className="lg:hidden font-bold text-base text-yellow-400">5 on 2</span>
@@ -128,7 +128,7 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
           <div className="px-4 py-3 space-y-1">
             {/* Season label on mobile */}
             {currentSeasonLabel && (
-              <div className="px-3 py-1 text-xs text-orange-400/80 font-medium">{currentSeasonLabel}</div>
+              <div className="px-3 py-1 text-xs font-medium" style={{ color: '#0d1e35' }}>{currentSeasonLabel}</div>
             )}
             {navLinks.map(({ href, label, icon: Icon }) => (
               <Link
