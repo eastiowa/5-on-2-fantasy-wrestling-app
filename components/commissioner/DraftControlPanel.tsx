@@ -263,7 +263,7 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
               {fullOrder.slice(0, 30).map((p) => (
                 <div key={p.pickNumber} className="text-center p-2 bg-gray-800 rounded text-xs">
                   <div className="text-yellow-400 font-bold">#{p.pickNumber}</div>
-                  <div className="text-gray-400 truncate" title={p.teamName}>{p.teamName.split(' ')[0]}</div>
+                  <div className="text-gray-400 truncate" title={p.teamName}>{p.teamName}</div>
                 </div>
               ))}
             </div>
