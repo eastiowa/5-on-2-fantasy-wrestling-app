@@ -254,6 +254,18 @@ export default function UsersPage() {
     }
   }
 
+  async function handleResetPassword(user: UserProfile) {
+    setBusy(`reset-${user.id}`)
+    const res = await fetch(`/api/users/${user.id}/reset-password`, { method: 'POST' })
+    const data = await res.json()
+    setBusy(null)
+    if (!res.ok) {
+      flash('error', data.error ?? 'Failed to send password reset email')
+      return
+    }
+    flash('success', `Password reset email sent to ${data.email} — ask them to check their inbox and spam folder.`)
+  }
+
   const commissioners = users.filter((u) => u.role === 'commissioner')
   const managers = users.filter((u) => u.role === 'team_manager')
   const isCurrentUserCommissioner = currentUserRole === 'commissioner'
@@ -458,6 +470,7 @@ export default function UsersPage() {
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
                   onResendActivation={handleResendActivation}
+                  onResetPassword={handleResetPassword}
                 />
               ))
             )}
@@ -487,6 +500,7 @@ export default function UsersPage() {
                   onUpdate={handleUpdate}
                   onDelete={handleDelete}
                   onResendActivation={handleResendActivation}
+                  onResetPassword={handleResetPassword}
                 />
               ))
             )}
@@ -522,6 +536,7 @@ function UserRow({
   onUpdate,
   onDelete,
   onResendActivation,
+  onResetPassword,
 }: {
   user: UserProfile
   teams: TeamOption[]
@@ -534,6 +549,7 @@ function UserRow({
   onUpdate: (id: string, payload: { display_name?: string; email?: string }) => Promise<boolean>
   onDelete: (user: UserProfile) => void
   onResendActivation: (user: UserProfile) => void
+  onResetPassword: (user: UserProfile) => void
 }) {
   const [editingName, setEditingName] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
@@ -544,8 +560,9 @@ function UserRow({
   useEffect(() => { setNameVal(user.display_name ?? '') }, [user.display_name])
   useEffect(() => { setEmailVal(user.email) }, [user.email])
 
-  const busy = busyId === user.id || busyId === `resend-${user.id}`
+  const busy = busyId === user.id || busyId === `resend-${user.id}` || busyId === `reset-${user.id}`
   const isResendBusy = busyId === `resend-${user.id}`
+  const isResetBusy = busyId === `reset-${user.id}`
   const isCommissioner = user.role === 'commissioner'
   const canDemote = canEdit && isCommissioner && !(isSelf && isLastCommissioner)
   const canPromote = canEdit && !isCommissioner
@@ -733,6 +750,19 @@ function UserRow({
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <MailCheck className="w-3.5 h-3.5" />}
             Resend Activation Email
+          </button>
+
+          {/* Send password reset email */}
+          <button
+            onClick={() => onResetPassword(user)}
+            disabled={!!busyId}
+            title="Send password reset email"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-purple-900/40 text-gray-400 hover:text-purple-300 border border-gray-700 hover:border-purple-700/50 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+          >
+            {isResetBusy
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Mail className="w-3.5 h-3.5" />}
+            Send Password Reset
           </button>
 
           {/* Delete user */}
