@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  UserCog, Shield, User, Loader2, CheckCircle, AlertCircle, Crown, Zap, Users
+  UserCog, Shield, User, Loader2, CheckCircle, AlertCircle,
+  Crown, Zap, Users, Trash2, Mail, Pencil, X, Check, MailCheck,
 } from 'lucide-react'
 
 interface UserProfile {
@@ -107,6 +108,53 @@ export default function UsersPage() {
     load()
   }
 
+  async function handleUpdate(userId: string, payload: { display_name?: string; email?: string }) {
+    setBusy(userId)
+    const res = await fetch(`/api/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const data = await res.json()
+    setBusy(null)
+    if (!res.ok) {
+      flash('error', data.error ?? 'Update failed')
+      return false
+    }
+    flash('success', 'User updated successfully')
+    load()
+    return true
+  }
+
+  async function handleDelete(user: UserProfile) {
+    const label = user.display_name ?? user.email
+    if (!confirm(`Permanently delete "${label}"?\n\nThis cannot be undone. Their account, login, and all associated data will be removed.`)) {
+      return
+    }
+    setBusy(user.id)
+    const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
+    const data = await res.json()
+    setBusy(null)
+    if (!res.ok) {
+      flash('error', data.error ?? 'Delete failed')
+      return
+    }
+    flash('success', `"${label}" has been deleted`)
+    load()
+  }
+
+  async function handleResendActivation(user: UserProfile) {
+    setBusy(`resend-${user.id}`)
+    const res = await fetch(`/api/users/${user.id}/resend-activation`, { method: 'POST' })
+    const data = await res.json()
+    setBusy(null)
+    if (!res.ok) {
+      flash('error', data.error ?? 'Failed to resend activation email')
+      return
+    }
+    flash('success', `Activation email resent to ${data.email}`)
+  }
+
   const commissioners = users.filter((u) => u.role === 'commissioner')
   const managers = users.filter((u) => u.role === 'team_manager')
   const isCurrentUserCommissioner = currentUserRole === 'commissioner'
@@ -117,7 +165,7 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <UserCog className="w-8 h-8 text-yellow-400 shrink-0" />
-        <h1 className="text-3xl font-bold text-white">User Roles</h1>
+        <h1 className="text-3xl font-bold text-white">User Management</h1>
       </div>
 
       {/* Toast */}
@@ -181,11 +229,14 @@ export default function UsersPage() {
                   user={u}
                   teams={teams}
                   isSelf={u.id === currentUserId}
-                  busy={busy === u.id}
+                  busyId={busy}
                   isLastCommissioner={commissioners.length === 1}
                   canEdit={isCurrentUserCommissioner}
                   onRoleChange={handleRoleChange}
                   onTeamAssign={handleTeamAssign}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                  onResendActivation={handleResendActivation}
                 />
               ))
             )}
@@ -207,11 +258,14 @@ export default function UsersPage() {
                   user={u}
                   teams={teams}
                   isSelf={u.id === currentUserId}
-                  busy={busy === u.id}
+                  busyId={busy}
                   isLastCommissioner={false}
                   canEdit={isCurrentUserCommissioner}
                   onRoleChange={handleRoleChange}
                   onTeamAssign={handleTeamAssign}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                  onResendActivation={handleResendActivation}
                 />
               ))
             )}
@@ -239,54 +293,145 @@ function UserRow({
   user,
   teams,
   isSelf,
-  busy,
+  busyId,
   isLastCommissioner,
   canEdit,
   onRoleChange,
   onTeamAssign,
+  onUpdate,
+  onDelete,
+  onResendActivation,
 }: {
   user: UserProfile
   teams: TeamOption[]
   isSelf: boolean
-  busy: boolean
+  busyId: string | null
   isLastCommissioner: boolean
   canEdit: boolean
   onRoleChange: (id: string, role: 'commissioner' | 'team_manager') => void
   onTeamAssign: (id: string, teamId: string | null) => void
+  onUpdate: (id: string, payload: { display_name?: string; email?: string }) => Promise<boolean>
+  onDelete: (user: UserProfile) => void
+  onResendActivation: (user: UserProfile) => void
 }) {
+  const [editingName, setEditingName] = useState(false)
+  const [editingEmail, setEditingEmail] = useState(false)
+  const [nameVal, setNameVal] = useState(user.display_name ?? '')
+  const [emailVal, setEmailVal] = useState(user.email)
+
+  // Keep local state in sync if parent reloads
+  useEffect(() => { setNameVal(user.display_name ?? '') }, [user.display_name])
+  useEffect(() => { setEmailVal(user.email) }, [user.email])
+
+  const busy = busyId === user.id || busyId === `resend-${user.id}`
+  const isResendBusy = busyId === `resend-${user.id}`
   const isCommissioner = user.role === 'commissioner'
   const canDemote = canEdit && isCommissioner && !(isSelf && isLastCommissioner)
   const canPromote = canEdit && !isCommissioner
 
+  async function saveName() {
+    const ok = await onUpdate(user.id, { display_name: nameVal })
+    if (ok) setEditingName(false)
+  }
+
+  async function saveEmail() {
+    const ok = await onUpdate(user.id, { email: emailVal })
+    if (ok) setEditingEmail(false)
+  }
+
   return (
     <div className="bg-gray-900 border border-orange-600/20 rounded-xl px-5 py-4 space-y-3">
-      <div className="flex items-center gap-4 flex-wrap">
+
+      {/* Top row: icon + identity + role badge + role action */}
+      <div className="flex items-start gap-4 flex-wrap">
         {/* Role icon */}
-        <div className={`p-2 rounded-lg shrink-0 ${isCommissioner ? 'bg-yellow-400/10' : 'bg-gray-800'}`}>
+        <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${isCommissioner ? 'bg-yellow-400/10' : 'bg-gray-800'}`}>
           {isCommissioner
             ? <Crown className="w-5 h-5 text-yellow-400" />
             : <User className="w-5 h-5 text-gray-400" />}
         </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
+        {/* Identity block */}
+        <div className="flex-1 min-w-0 space-y-1.5">
+
+          {/* Display name row */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white text-sm">
-              {user.display_name ?? user.email}
-            </span>
-            {isSelf && (
-              <span className="text-xs px-2 py-0.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 rounded-full">
-                You
-              </span>
+            {editingName && canEdit ? (
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={nameVal}
+                  onChange={(e) => setNameVal(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false) }}
+                  placeholder="Display name"
+                  className="px-2 py-1 bg-gray-800 border border-yellow-400/50 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400 w-44"
+                />
+                <button onClick={saveName} disabled={busy} className="p-1 text-green-400 hover:text-green-300 disabled:opacity-40">
+                  {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                </button>
+                <button onClick={() => { setEditingName(false); setNameVal(user.display_name ?? '') }} className="p-1 text-gray-500 hover:text-gray-300">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-white text-sm">
+                  {user.display_name ?? <span className="text-gray-500 italic">No display name</span>}
+                </span>
+                {isSelf && (
+                  <span className="text-xs px-2 py-0.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 rounded-full">
+                    You
+                  </span>
+                )}
+                {canEdit && (
+                  <button
+                    onClick={() => setEditingName(true)}
+                    title="Edit display name"
+                    className="p-1 text-gray-600 hover:text-gray-300 transition-colors"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
-          {user.display_name && (
-            <div className="text-xs text-gray-500 mt-0.5">{user.email}</div>
+
+          {/* Email row */}
+          {editingEmail && canEdit ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                type="email"
+                value={emailVal}
+                onChange={(e) => setEmailVal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') saveEmail(); if (e.key === 'Escape') setEditingEmail(false) }}
+                className="px-2 py-1 bg-gray-800 border border-yellow-400/50 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400 w-56"
+              />
+              <button onClick={saveEmail} disabled={busy} className="p-1 text-green-400 hover:text-green-300 disabled:opacity-40">
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              </button>
+              <button onClick={() => { setEditingEmail(false); setEmailVal(user.email) }} className="p-1 text-gray-500 hover:text-gray-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">{user.email}</span>
+              {canEdit && (
+                <button
+                  onClick={() => setEditingEmail(true)}
+                  title="Edit email"
+                  className="p-1 text-gray-600 hover:text-gray-300 transition-colors"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Role badge + action */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Role badge + role action */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
             isCommissioner
               ? 'bg-yellow-950 border-yellow-700 text-yellow-300'
@@ -295,12 +440,13 @@ function UserRow({
             {isCommissioner ? 'Commissioner' : 'Team Manager'}
           </span>
 
-          {busy ? (
+          {busy && busyId === user.id ? (
             <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
           ) : canPromote ? (
             <button
               onClick={() => onRoleChange(user.id, 'commissioner')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 rounded-lg text-xs font-medium transition-colors"
+              disabled={!!busyId}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
             >
               <Crown className="w-3 h-3" />
               Make Commissioner
@@ -316,7 +462,8 @@ function UserRow({
                   onRoleChange(user.id, 'team_manager')
                 }
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700 rounded-lg text-xs font-medium transition-colors"
+              disabled={!!busyId}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-400 border border-gray-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
             >
               <User className="w-3 h-3" />
               Remove Access
@@ -327,13 +474,13 @@ function UserRow({
         </div>
       </div>
 
-      {/* Team assignment — shown for all users when commissioner is editing */}
+      {/* Team assignment */}
       {canEdit && (
         <div className="flex items-center gap-3 pl-14 flex-wrap">
           <Users className="w-3.5 h-3.5 text-gray-500 shrink-0" />
           <select
             value={user.team_id ?? ''}
-            disabled={busy}
+            disabled={!!busyId}
             onChange={(e) => onTeamAssign(user.id, e.target.value || null)}
             className="flex-1 max-w-xs px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400 disabled:opacity-50"
           >
@@ -347,6 +494,45 @@ function UserRow({
           </select>
           {!user.team_id && (
             <span className="text-xs text-yellow-600">Not assigned to a team</span>
+          )}
+        </div>
+      )}
+
+      {/* Action row: resend activation + delete */}
+      {canEdit && (
+        <div className="flex items-center gap-2 pl-14 flex-wrap pt-1 border-t border-gray-800">
+          {/* Resend activation email */}
+          <button
+            onClick={() => onResendActivation(user)}
+            disabled={!!busyId}
+            title="Resend activation / confirmation email"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-blue-900/40 text-gray-400 hover:text-blue-300 border border-gray-700 hover:border-blue-700/50 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+          >
+            {isResendBusy
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <MailCheck className="w-3.5 h-3.5" />}
+            Resend Activation Email
+          </button>
+
+          {/* Delete user */}
+          {!isSelf && (
+            <button
+              onClick={() => onDelete(user)}
+              disabled={!!busyId}
+              title="Permanently delete this user"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-red-900/40 text-gray-400 hover:text-red-400 border border-gray-700 hover:border-red-700/50 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 ml-auto"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete User
+            </button>
+          )}
+
+          {/* Invite / email icon placeholder (visual context) */}
+          {isSelf && (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-gray-600">
+              <Mail className="w-3.5 h-3.5" />
+              Cannot delete your own account here
+            </span>
           )}
         </div>
       )}

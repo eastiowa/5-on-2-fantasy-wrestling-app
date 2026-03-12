@@ -12,6 +12,68 @@ import { NextResponse } from 'next/server'
 //
 // Safety: prevents the last commissioner from demoting themselves.
 
+// DELETE /api/users/[id]
+// Permanently deletes a user from auth + cascade-deletes the profile.
+// Commissioner-only. Cannot delete yourself if you are the last commissioner.
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient()
+  const { id: targetId } = await params
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const [{ data: callerProfile }, { count: commissionerCount }] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'commissioner'),
+  ])
+
+  if (callerProfile?.role !== 'commissioner') {
+    return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+  }
+
+  // Prevent deleting yourself if you are the last commissioner
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('role, email, display_name')
+    .eq('id', targetId)
+    .single()
+
+  if (!targetProfile) {
+    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  }
+
+  if (
+    targetId === user.id &&
+    targetProfile.role === 'commissioner' &&
+    (commissionerCount ?? 0) <= 1
+  ) {
+    return NextResponse.json(
+      { error: 'Cannot delete yourself — you are the last commissioner' },
+      { status: 409 }
+    )
+  }
+
+  const admin = createAdminClient()
+
+  // Clear team manager references before deletion
+  await admin.from('teams').update({ manager_id: null }).eq('manager_id', targetId)
+
+  // Delete from Supabase Auth (profile cascades via FK or trigger)
+  const { error: deleteErr } = await admin.auth.admin.deleteUser(targetId)
+  if (deleteErr) {
+    return NextResponse.json({ error: `Delete failed: ${deleteErr.message}` }, { status: 500 })
+  }
+
+  // Also remove profile row in case there's no cascade trigger
+  await admin.from('profiles').delete().eq('id', targetId)
+
+  return NextResponse.json({ success: true, deleted_id: targetId })
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
