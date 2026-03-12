@@ -62,7 +62,7 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
                   )}
                   title={team.name}
                 >
-                  {team.name.split(' ').slice(-1)[0]}
+                  {team.name}
                 </th>
               ))}
             </tr>
