@@ -31,7 +31,7 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
   const navLinks = [
     ...(role ? [{ href: '/', label: 'Dashboard', icon: Trophy }] : []),
     ...(role && hasTeam ? [
-      { href: '/dashboard', label: 'My Team', icon: LayoutDashboard },
+      { href: '/dashboard', label: 'Teams', icon: LayoutDashboard },
     ] : []),
     ...(role ? [
       { href: '/draft', label: 'Draft Room', icon: Users },

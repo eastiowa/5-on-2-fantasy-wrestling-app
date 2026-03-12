@@ -4,7 +4,7 @@ import { formatPoints } from '@/lib/utils'
 import { WEIGHT_CLASSES } from '@/types'
 import {
   Trophy, TrendingUp, Users, Clock, Star, Zap, Award,
-  CalendarDays, User, Mail, Crown, History, Medal
+  CalendarDays, User, Mail, Crown, History, Medal, ChevronDown
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -73,11 +73,11 @@ export default async function DashboardPage() {
     .not('final_placement', 'is', null)
     .order('season(year)', { ascending: false })
 
-  // ── Draft picks (current season scoped if available) ───────────────────────
-  const picksQuery = supabase
+  // ── Draft picks — ALL teams in one query ───────────────────────────────────
+  const allPicksQuery = supabase
     .from('draft_picks')
     .select(`
-      id, pick_number, round,
+      id, pick_number, round, team_id,
       athlete:athletes(
         id, name, weight, school, seed,
         scores(
@@ -87,54 +87,63 @@ export default async function DashboardPage() {
         )
       )
     `)
-    .eq('team_id', profile.team_id)
     .order('pick_number')
 
-  if (currentSeason) picksQuery.eq('season_id', currentSeason.id)
+  if (currentSeason) allPicksQuery.eq('season_id', currentSeason.id)
 
-  const { data: picks } = await picksQuery
+  const { data: allPicksRaw } = await allPicksQuery
 
-  const athletes = (picks ?? []).map((p: any) => {
-    const scores: any[] = p.athlete?.scores ?? []
-    const totalPoints = scores.reduce((sum: number, s: any) => sum + Number(s.total_points ?? 0), 0)
-    const champWins = scores.reduce((sum: number, s: any) => sum + (s.championship_wins ?? 0), 0)
-    const consolWins = scores.reduce((sum: number, s: any) => sum + (s.consolation_wins ?? 0), 0)
-    const bonusPts = scores.reduce((sum: number, s: any) => sum + Number(s.bonus_points ?? 0), 0)
-    const placementPts = scores.reduce((sum: number, s: any) => sum + Number(s.placement_points ?? 0), 0)
-    const placement = scores.length > 0 ? scores[scores.length - 1].placement : null
-    return {
-      ...p.athlete,
-      pick_number: p.pick_number,
-      round: p.round,
-      total_points: totalPoints,
-      champ_wins: champWins,
-      consol_wins: consolWins,
-      bonus_points: bonusPts,
-      placement_points: placementPts,
-      placement,
-      scores,
-    }
+  // Group picks by team_id
+  const picksByTeam: Record<string, any[]> = {}
+  ;(allPicksRaw ?? []).forEach((p: any) => {
+    if (!picksByTeam[p.team_id]) picksByTeam[p.team_id] = []
+    picksByTeam[p.team_id].push(p)
   })
 
-  const teamTotal = athletes.reduce((sum, a) => sum + (a.total_points ?? 0), 0)
+  function buildAthletes(picks: any[]) {
+    return (picks ?? []).map((p: any) => {
+      const scores: any[] = p.athlete?.scores ?? []
+      const totalPoints = scores.reduce((sum: number, s: any) => sum + Number(s.total_points ?? 0), 0)
+      const champWins = scores.reduce((sum: number, s: any) => sum + (s.championship_wins ?? 0), 0)
+      const consolWins = scores.reduce((sum: number, s: any) => sum + (s.consolation_wins ?? 0), 0)
+      const bonusPts = scores.reduce((sum: number, s: any) => sum + Number(s.bonus_points ?? 0), 0)
+      const placementPts = scores.reduce((sum: number, s: any) => sum + Number(s.placement_points ?? 0), 0)
+      const placement = scores.length > 0 ? scores[scores.length - 1].placement : null
+      return {
+        ...p.athlete,
+        pick_number: p.pick_number,
+        round: p.round,
+        total_points: totalPoints,
+        champ_wins: champWins,
+        consol_wins: consolWins,
+        bonus_points: bonusPts,
+        placement_points: placementPts,
+        placement,
+        scores,
+      }
+    })
+  }
 
-  // League rank (current season)
-  const { data: allPicks } = currentSeason
-    ? await supabase
-        .from('draft_picks')
-        .select('team_id, athlete:athletes(scores(total_points))')
-        .eq('season_id', currentSeason.id)
-    : await supabase
-        .from('draft_picks')
-        .select('team_id, athlete:athletes(scores(total_points))')
+  const myAthletes = buildAthletes(picksByTeam[profile.team_id] ?? [])
+  const teamTotal = myAthletes.reduce((sum, a) => sum + (a.total_points ?? 0), 0)
 
+  // ── All teams (for standings + other teams section) ─────────────────────────
+  const { data: allTeams } = await supabase
+    .from('teams')
+    .select('id, name, manager:profiles!manager_id(display_name, email)')
+    .order('name')
+
+  // Compute total points per team
   const teamTotals: Record<string, number> = {}
-  ;(allPicks ?? []).forEach((p: any) => {
-    const pts = (p.athlete?.scores ?? []).reduce(
-      (s: number, sc: any) => s + Number(sc.total_points ?? 0), 0
-    )
-    teamTotals[p.team_id] = (teamTotals[p.team_id] ?? 0) + pts
+  ;(allTeams ?? []).forEach((t: any) => {
+    const picks = picksByTeam[t.id] ?? []
+    teamTotals[t.id] = picks.reduce((sum: number, p: any) => {
+      return sum + (p.athlete?.scores ?? []).reduce(
+        (s: number, sc: any) => s + Number(sc.total_points ?? 0), 0
+      )
+    }, 0)
   })
+
   const allTotals = Object.values(teamTotals).sort((a, b) => b - a)
   const myRank = allTotals.findIndex((t) => t === teamTotals[profile.team_id]) + 1
 
@@ -144,7 +153,9 @@ export default async function DashboardPage() {
     .select('status, current_pick_number')
     .maybeSingle()
 
-  const weightMap = Object.fromEntries(athletes.map((a: any) => [a.weight, a]))
+  const weightMap = Object.fromEntries(myAthletes.map((a: any) => [a.weight, a]))
+
+  const otherTeams = (allTeams ?? []).filter((t: any) => t.id !== profile.team_id)
 
   const placementLabel = (n: number | null) => {
     if (!n) return null
@@ -206,7 +217,7 @@ export default async function DashboardPage() {
               <div className="flex items-center gap-3">
                 <Users className="w-7 h-7 text-yellow-400 shrink-0" />
                 <div>
-                  <div className="text-2xl font-bold text-white">{athletes.length}/10</div>
+                  <div className="text-2xl font-bold text-white">{myAthletes.length}/10</div>
                   <div className="text-xs text-gray-400">Athletes Drafted</div>
                 </div>
               </div>
@@ -224,7 +235,7 @@ export default async function DashboardPage() {
               )}
             </div>
 
-            {athletes.length > 0 && (
+            {myAthletes.length > 0 && (
               <div className="px-6 py-2 bg-gray-800/50 flex flex-wrap gap-4 text-xs text-gray-500 border-b border-gray-800">
                 <span className="flex items-center gap-1"><Star className="w-3 h-3 text-yellow-400" /> Champ Wins (1pt ea)</span>
                 <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-orange-400" /> Consol Wins (0.5pt ea)</span>
@@ -300,6 +311,82 @@ export default async function DashboardPage() {
               })}
             </div>
           </div>
+
+          {/* ── Other Teams ─────────────────────────────────────────────── */}
+          {otherTeams.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-yellow-400" />
+                Other Teams
+              </h2>
+
+              {otherTeams
+                .sort((a: any, b: any) => (teamTotals[b.id] ?? 0) - (teamTotals[a.id] ?? 0))
+                .map((otherTeam: any) => {
+                  const oAthletes = buildAthletes(picksByTeam[otherTeam.id] ?? [])
+                  const oTotal = oAthletes.reduce((s, a) => s + (a.total_points ?? 0), 0)
+                  const oWeightMap = Object.fromEntries(oAthletes.map((a: any) => [a.weight, a]))
+                  const managerName = otherTeam.manager?.display_name || otherTeam.manager?.email || 'TBD'
+                  const rank = allTotals.findIndex((t) => t === teamTotals[otherTeam.id]) + 1
+
+                  return (
+                    <details key={otherTeam.id} className="group bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+                      <summary className="flex items-center gap-4 px-6 py-4 cursor-pointer list-none hover:bg-gray-800/40 transition-colors select-none">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-white">{otherTeam.name}</div>
+                          <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {managerName}
+                            {rank > 0 && <span className="ml-2 text-gray-600">· Rank #{rank}</span>}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-bold text-yellow-400">{formatPoints(oTotal)}</div>
+                          <div className="text-xs text-gray-500">{oAthletes.length}/10 drafted</div>
+                        </div>
+                        <ChevronDown className="w-4 h-4 text-gray-500 shrink-0 transition-transform group-open:rotate-180" />
+                      </summary>
+
+                      <div className="border-t border-gray-800 divide-y divide-gray-800/60">
+                        {WEIGHT_CLASSES.map((weight) => {
+                          const ath = oWeightMap[weight] as any
+                          return (
+                            <div key={weight} className="flex items-center gap-4 px-6 py-3">
+                              <div className="w-14 text-center shrink-0">
+                                <span className="text-xs font-bold bg-gray-800 text-yellow-400 px-2 py-0.5 rounded-full">
+                                  {weight}
+                                </span>
+                              </div>
+                              {ath ? (
+                                <>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-white truncate">{ath.name}</div>
+                                    <div className="text-xs text-gray-500">{ath.school} · Seed #{ath.seed}</div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <div className="text-sm font-bold text-yellow-400">{formatPoints(ath.total_points)}</div>
+                                    {ath.total_points > 0 && (
+                                      <div className="text-xs text-gray-600 flex items-center justify-end gap-1 mt-0.5 flex-wrap">
+                                        {ath.champ_wins > 0 && <span className="text-yellow-500">{ath.champ_wins}✦</span>}
+                                        {ath.consol_wins > 0 && <span className="text-orange-500">{ath.consol_wins}⚡</span>}
+                                        {ath.placement_points > 0 && <span className="text-green-500">+{formatPoints(ath.placement_points)}pl</span>}
+                                      </div>
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                <div className="flex-1 text-gray-700 italic text-xs">— Empty —</div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </details>
+                  )
+                })}
+            </div>
+          )}
+
         </div>
 
         {/* Right column — info sidebar */}
