@@ -25,15 +25,16 @@ export async function PATCH(
 
   // ── Parse body once ─────────────────────────────────────────────────────────
   const body = await req.json().catch(() => ({}))
-  const { role, team_id } = body
+  const { role, team_id, display_name, email } = body
 
-  // team_id-only update (no role change) is also valid
   const hasRole = role !== undefined
   const hasTeamId = team_id !== undefined
+  const hasDisplayName = display_name !== undefined
+  const hasEmail = email !== undefined
 
-  if (!hasRole && !hasTeamId) {
+  if (!hasRole && !hasTeamId && !hasDisplayName && !hasEmail) {
     return NextResponse.json(
-      { error: 'Provide at least one of: role, team_id' },
+      { error: 'Provide at least one of: role, team_id, display_name, email' },
       { status: 400 }
     )
   }
@@ -85,10 +86,22 @@ export async function PATCH(
   // ── Apply change (use admin client to bypass RLS) ───────────────────────────
   const admin = createAdminClient()
 
-  // Build profile update payload
+  // ── Update Supabase Auth email (requires admin) ───────────────────────────
+  if (hasEmail && email?.trim()) {
+    const { error: authErr } = await admin.auth.admin.updateUserById(targetId, {
+      email: email.trim(),
+    })
+    if (authErr) {
+      return NextResponse.json({ error: `Email update failed: ${authErr.message}` }, { status: 500 })
+    }
+  }
+
+  // ── Build profile update payload ──────────────────────────────────────────
   const profileUpdate: Record<string, unknown> = {}
   if (hasRole) profileUpdate.role = role
   if (hasTeamId) profileUpdate.team_id = team_id ?? null
+  if (hasDisplayName) profileUpdate.display_name = display_name?.trim() || null
+  if (hasEmail && email?.trim()) profileUpdate.email = email.trim()
 
   const { data, error } = await admin
     .from('profiles')
@@ -106,10 +119,7 @@ export async function PATCH(
 
   // ── Sync teams.manager_id ──────────────────────────────────────────────────
   if (hasTeamId) {
-    // Clear this user from any team they were previously on
     await admin.from('teams').update({ manager_id: null }).eq('manager_id', targetId)
-
-    // Assign them to the new team (if team_id is not null)
     if (team_id) {
       await admin.from('teams').update({ manager_id: targetId }).eq('id', team_id)
     }

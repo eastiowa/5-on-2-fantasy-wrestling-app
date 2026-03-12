@@ -3,17 +3,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Mail, Trash2, Loader2, AlertCircle, CheckCircle, User,
-  Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff, Link2, Copy, ListOrdered
+  Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff, Link2, Copy,
+  ListOrdered, ChevronDown, Save
 } from 'lucide-react'
 
 interface TeamWithManager {
   id: string
   name: string
   manager_id: string | null
-  draft_position: number | null   // from current season's team_seasons
+  draft_position: number | null
   created_at: string
   manager: { id: string; display_name: string | null; email: string } | null
 }
+
+// ── TeamRow ──────────────────────────────────────────────────────────────────
 
 function TeamRow({
   team,
@@ -24,6 +27,7 @@ function TeamRow({
   commissionerId,
   onClaim,
   onRelease,
+  onSaveManagerInfo,
 }: {
   team: TeamWithManager
   index: number
@@ -33,13 +37,15 @@ function TeamRow({
   commissionerId: string
   onClaim: (id: string) => Promise<void>
   onRelease: (id: string) => Promise<void>
+  onSaveManagerInfo: (teamId: string, managerId: string, patch: { display_name?: string; email?: string; team_name?: string }) => Promise<void>
 }) {
+  const [claiming, setClaiming] = useState(false)
+  const isOwnedByCommissioner = team.manager?.id === commissionerId
+
+  // ── Inline rename state ──────────────────────────────────────────────────
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(team.name)
   const [saving, setSaving] = useState(false)
-  const [claiming, setClaiming] = useState(false)
-
-  const isOwnedByCommissioner = team.manager?.id === commissionerId
 
   async function commitRename() {
     const trimmed = editName.trim()
@@ -50,100 +56,207 @@ function TeamRow({
     setEditing(false)
   }
 
-  function cancelEdit() { setEditing(false); setEditName(team.name) }
+  // ── Manager info edit panel ──────────────────────────────────────────────
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [editDisplayName, setEditDisplayName] = useState(team.manager?.display_name ?? '')
+  const [editEmail, setEditEmail] = useState(team.manager?.email ?? '')
+  const [editTeamName, setEditTeamName] = useState(team.name)
+  const [savingInfo, setSavingInfo] = useState(false)
+
+  // Re-sync when team prop changes
+  useEffect(() => {
+    setEditDisplayName(team.manager?.display_name ?? '')
+    setEditEmail(team.manager?.email ?? '')
+    setEditTeamName(team.name)
+  }, [team])
+
+  async function handleSaveInfo() {
+    if (!team.manager) return
+    setSavingInfo(true)
+    const patch: { display_name?: string; email?: string; team_name?: string } = {}
+    if (editDisplayName.trim() !== (team.manager.display_name ?? '')) patch.display_name = editDisplayName.trim()
+    if (editEmail.trim() !== team.manager.email) patch.email = editEmail.trim()
+    if (editTeamName.trim() !== team.name) patch.team_name = editTeamName.trim()
+    await onSaveManagerInfo(team.id, team.manager.id, patch)
+    setSavingInfo(false)
+    setPanelOpen(false)
+  }
 
   return (
-    <div className="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg border border-orange-600/20">
-      {/* Draft position badge (display only — set in Season Management) */}
-      <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-yellow-400 shrink-0"
-        title={team.draft_position ? `Draft position ${team.draft_position} (current season)` : 'No draft position set'}>
-        {team.draft_position ?? '—'}
-      </div>
+    <div className="bg-gray-800/50 rounded-lg border border-orange-600/20 overflow-hidden">
+      {/* Main row */}
+      <div className="flex items-center gap-3 p-4">
+        {/* Draft position badge */}
+        <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-yellow-400 shrink-0"
+          title={team.draft_position ? `Draft position ${team.draft_position}` : 'No draft position set'}>
+          {team.draft_position ?? '—'}
+        </div>
 
-      {/* Team info */}
-      <div className="flex-1 min-w-0">
-        {editing ? (
-          <div className="flex items-center gap-2">
-            <input
-              autoFocus
-              type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') cancelEdit() }}
-              className="flex-1 px-2 py-1 bg-gray-700 border border-yellow-400/60 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
-            />
-            <button onClick={commitRename} disabled={saving}
-              className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50 transition-colors" title="Save">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            </button>
-            <button onClick={cancelEdit} className="p-1 text-gray-500 hover:text-gray-300 transition-colors" title="Cancel">
-              <X className="w-4 h-4" />
-            </button>
+        {/* Team info */}
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setEditing(false); setEditName(team.name) } }}
+                className="flex-1 px-2 py-1 bg-gray-700 border border-yellow-400/60 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              />
+              <button onClick={commitRename} disabled={saving} className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              </button>
+              <button onClick={() => { setEditing(false); setEditName(team.name) }} className="p-1 text-gray-500 hover:text-gray-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group">
+              <div className="font-semibold text-white">{team.name}</div>
+              <button
+                onClick={() => { setEditName(team.name); setEditing(true) }}
+                className="p-0.5 text-gray-600 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-all"
+                title="Rename team"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+            <User className="w-3 h-3" />
+            {team.manager
+              ? (team.manager.display_name ?? team.manager.email)
+              : <span className="text-yellow-600">No manager assigned</span>}
           </div>
-        ) : (
-          <div className="flex items-center gap-2 group">
-            <div className="font-semibold text-white">{team.name}</div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Edit info panel toggle */}
+          {team.manager && (
             <button
-              onClick={() => { setEditName(team.name); setEditing(true) }}
-              className="p-0.5 text-gray-600 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-all"
-              title="Rename team"
+              onClick={() => setPanelOpen((o) => !o)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg transition-colors ${
+                panelOpen
+                  ? 'bg-orange-950 text-orange-300 border-orange-800'
+                  : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'
+              }`}
+              title="Edit team & manager info"
             >
               <Pencil className="w-3 h-3" />
+              Edit Info
+              <ChevronDown className={`w-3 h-3 transition-transform ${panelOpen ? 'rotate-180' : ''}`} />
             </button>
-          </div>
-        )}
-        <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-          <User className="w-3 h-3" />
-          {team.manager
-            ? (team.manager.display_name ?? team.manager.email)
-            : <span className="text-yellow-600">No manager assigned</span>}
+          )}
+
+          {/* Commissioner claim / release */}
+          {isOwnedByCommissioner ? (
+            <button
+              disabled={claiming}
+              onClick={async () => { setClaiming(true); await onRelease(team.id); setClaiming(false) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-yellow-950 text-yellow-400 border border-yellow-800 rounded-lg hover:bg-yellow-900 transition-colors disabled:opacity-50"
+            >
+              {claiming ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldOff className="w-3 h-3" />}
+              My Team
+            </button>
+          ) : (
+            <button
+              disabled={claiming}
+              onClick={async () => { setClaiming(true); await onClaim(team.id); setClaiming(false) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-800 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-700 hover:text-yellow-400 transition-colors disabled:opacity-50"
+            >
+              {claiming ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+              Claim
+            </button>
+          )}
+
+          <button
+            onClick={() => onInvite(team.id, team.name)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-950 text-blue-400 border border-blue-800 rounded-lg hover:bg-blue-900 transition-colors"
+          >
+            <Mail className="w-3 h-3" />
+            {team.manager && !isOwnedByCommissioner ? 'Re-invite' : 'Invite Manager'}
+          </button>
+
+          <button
+            onClick={() => onDelete(team.id)}
+            className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded"
+            title="Delete team"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 shrink-0">
-        {/* Commissioner claim / release */}
-        {isOwnedByCommissioner ? (
-          <button
-            disabled={claiming}
-            onClick={async () => { setClaiming(true); await onRelease(team.id); setClaiming(false) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-yellow-950 text-yellow-400 border border-yellow-800 rounded-lg hover:bg-yellow-900 transition-colors disabled:opacity-50"
-            title="Release — stop managing this team"
-          >
-            {claiming ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldOff className="w-3 h-3" />}
-            My Team
-          </button>
-        ) : (
-          <button
-            disabled={claiming}
-            onClick={async () => { setClaiming(true); await onClaim(team.id); setClaiming(false) }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-gray-800 text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-700 hover:text-yellow-400 transition-colors disabled:opacity-50"
-            title="Claim this team as your own"
-          >
-            {claiming ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-            Claim
-          </button>
-        )}
+      {/* Edit info panel */}
+      {panelOpen && team.manager && (
+        <div className="border-t border-orange-600/20 bg-gray-900/60 px-5 py-4 space-y-4">
+          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Edit Team &amp; Manager Info</p>
 
-        <button
-          onClick={() => onInvite(team.id, team.name)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-950 text-blue-400 border border-blue-800 rounded-lg hover:bg-blue-900 transition-colors"
-        >
-          <Mail className="w-3 h-3" />
-          {team.manager && !isOwnedByCommissioner ? 'Re-invite' : 'Invite Manager'}
-        </button>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Team name */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Team Name</label>
+              <input
+                type="text"
+                value={editTeamName}
+                onChange={(e) => setEditTeamName(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              />
+            </div>
 
-        <button
-          onClick={() => onDelete(team.id)}
-          className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded"
-          title="Delete team"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
+            {/* Manager display name */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Manager Display Name</label>
+              <input
+                type="text"
+                value={editDisplayName}
+                onChange={(e) => setEditDisplayName(e.target.value)}
+                placeholder="e.g. Coach Miller"
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              />
+            </div>
+
+            {/* Manager email */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Manager Email</label>
+              <input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleSaveInfo}
+              disabled={savingInfo}
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg text-sm transition-colors"
+            >
+              {savingInfo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Save Changes
+            </button>
+            <button
+              onClick={() => setPanelOpen(false)}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <p className="text-xs text-yellow-700">
+            ⚠️ Changing the email address updates the manager&apos;s login email. They may need to verify the new address.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
+
+// ── TeamsManager ─────────────────────────────────────────────────────────────
 
 export function TeamsManager({ commissionerId }: { commissionerId: string }) {
   const [teams, setTeams] = useState<TeamWithManager[]>([])
@@ -213,9 +326,8 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
 
   async function handleClaim(teamId: string) {
     const res = await fetch(`/api/teams/${teamId}/claim`, { method: 'POST' })
-    if (res.ok) {
-      await fetchTeams()
-    } else {
+    if (res.ok) { await fetchTeams() }
+    else {
       const data = await res.json().catch(() => ({}))
       setMessage({ type: 'error', text: data.error ?? 'Failed to claim team.' })
     }
@@ -223,9 +335,8 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
 
   async function handleRelease(teamId: string) {
     const res = await fetch(`/api/teams/${teamId}/claim`, { method: 'DELETE' })
-    if (res.ok) {
-      await fetchTeams()
-    } else {
+    if (res.ok) { await fetchTeams() }
+    else {
       const data = await res.json().catch(() => ({}))
       setMessage({ type: 'error', text: data.error ?? 'Failed to release team.' })
     }
@@ -242,6 +353,51 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     } else {
       const data = await res.json().catch(() => ({}))
       setMessage({ type: 'error', text: data.error ?? 'Failed to rename team.' })
+    }
+  }
+
+  async function handleSaveManagerInfo(
+    teamId: string,
+    managerId: string,
+    patch: { display_name?: string; email?: string; team_name?: string }
+  ) {
+    const errors: string[] = []
+
+    // Update team name if changed
+    if (patch.team_name) {
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: patch.team_name }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        errors.push(d.error ?? 'Failed to rename team')
+      }
+    }
+
+    // Update manager profile (display_name and/or email)
+    if (patch.display_name !== undefined || patch.email !== undefined) {
+      const userPatch: Record<string, string> = {}
+      if (patch.display_name !== undefined) userPatch.display_name = patch.display_name
+      if (patch.email !== undefined) userPatch.email = patch.email
+
+      const res = await fetch(`/api/users/${managerId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userPatch),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        errors.push(d.error ?? 'Failed to update manager info')
+      }
+    }
+
+    if (errors.length > 0) {
+      setMessage({ type: 'error', text: errors.join(' · ') })
+    } else {
+      setMessage({ type: 'success', text: 'Team info updated successfully' })
+      await fetchTeams()
     }
   }
 
@@ -281,10 +437,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     }
   }
 
-  /**
-   * Get Link — uses the custom token system.
-   * No email required — the manager supplies their email on the /join page.
-   */
   async function handleGetLink() {
     if (!inviteTeamId) return
     setGeneratingLink(true)
@@ -333,10 +485,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
           <p className="text-red-300 font-semibold">Failed to load teams</p>
           <p className="text-red-400 text-sm mt-1">{fetchError}</p>
         </div>
-        <button
-          onClick={fetchTeams}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors shrink-0"
-        >
+        <button onClick={fetchTeams} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors shrink-0">
           <RefreshCw className="w-3 h-3" />
           Retry
         </button>
@@ -391,28 +540,22 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             <h3 className="font-semibold text-white">
               Invite Manager — <span className="text-yellow-400">{inviteTeamName}</span>
             </h3>
-            <button
-              onClick={() => { setInviteTeamId(null); setGeneratedLink(null) }}
-              className="text-gray-500 hover:text-gray-300 transition-colors"
-            >
+            <button onClick={() => { setInviteTeamId(null); setGeneratedLink(null) }} className="text-gray-500 hover:text-gray-300 transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* ── Get Link (no email needed) ───────────────────────────── */}
+          {/* Get Link */}
           <div className="flex items-center gap-3">
             <button
               onClick={handleGetLink}
               disabled={inviting || generatingLink}
               className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/40 text-white font-semibold rounded-lg transition-colors text-sm"
-              title="Generate a shareable link — manager sets their own email on the join page"
             >
               {generatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
               Get Link
             </button>
-            <p className="text-xs text-gray-500">
-              No email required — manager registers with their own email on the join page.
-            </p>
+            <p className="text-xs text-gray-500">No email required — manager registers with their own email on the join page.</p>
           </div>
 
           {generatedLink && (
@@ -437,19 +580,14 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
                 </button>
               </div>
               <p className="text-xs text-yellow-600">
-                ⚠️ Single-use link · expires{' '}
-                {generatedLinkExpiry
-                  ? new Date(generatedLinkExpiry).toLocaleDateString()
-                  : 'in 7 days'}
+                ⚠️ Single-use link · expires {generatedLinkExpiry ? new Date(generatedLinkExpiry).toLocaleDateString() : 'in 7 days'}
               </p>
             </div>
           )}
 
-          {/* ── Send Email (Supabase invite, email required) ─────────── */}
+          {/* Send Email */}
           <div className="border-t border-gray-800 pt-4 space-y-3">
-            <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">
-              Or send a Supabase invite email
-            </p>
+            <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Or send a Supabase invite email</p>
             <div className="flex gap-2 flex-wrap">
               <input
                 type="email"
@@ -463,7 +601,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
                 onClick={handleInvite}
                 disabled={inviting || !inviteEmail.trim()}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors text-sm"
-                title="Supabase sends the invite email directly"
               >
                 {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                 Send Email
@@ -480,21 +617,17 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             <h3 className="font-semibold text-white">
               Teams <span className="text-gray-500 font-normal text-sm">({teams.length}/10)</span>
             </h3>
-            <button
-              onClick={fetchTeams}
-              className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg"
-              title="Refresh teams"
-            >
+            <button onClick={fetchTeams} className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg" title="Refresh teams">
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Draft order hint */}
           <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-800/60 rounded-lg border border-orange-600/20 text-xs text-gray-400">
             <ListOrdered className="w-3.5 h-3.5 text-orange-400 shrink-0 mt-0.5" />
             <span>
               The number badge shows each team&apos;s draft position for the current season.
               To set or change draft order, go to <strong className="text-gray-300">Season Management → Draft Order</strong>.
+              Use <strong className="text-gray-300">Edit Info</strong> to update team name, manager name, or email.
             </span>
           </div>
 
@@ -510,6 +643,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
                 commissionerId={commissionerId}
                 onClaim={handleClaim}
                 onRelease={handleRelease}
+                onSaveManagerInfo={handleSaveManagerInfo}
               />
             ))}
           </div>
