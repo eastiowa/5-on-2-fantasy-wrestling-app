@@ -95,6 +95,29 @@ export async function POST(req: NextRequest) {
     }
 
     if (inviteError) {
+      console.error('[POST /api/users] inviteUserByEmail error:', inviteError.message)
+
+      // If email delivery failed (rate limit, SMTP, etc.) try to fall back to a link
+      const isEmailDeliveryFailure = /rate.?limit|too many|sending|smtp|mail|email/i.test(inviteError.message)
+      if (isEmailDeliveryFailure) {
+        const { data: linkData } = await admin.auth.admin.generateLink({
+          type: 'invite',
+          email: email.trim(),
+          options: { redirectTo, data: userData },
+        })
+        const actionLink = linkData?.properties?.action_link
+        if (actionLink) {
+          const userId = linkData?.user?.id
+          if (userId) await upsertProfile(userId)
+          return NextResponse.json({
+            success: true,
+            email_failed: true,
+            link: actionLink,
+            message: `Email sending failed (${inviteError.message}). Share this link instead:`,
+          })
+        }
+      }
+
       return NextResponse.json({ error: inviteError.message }, { status: 500 })
     }
 

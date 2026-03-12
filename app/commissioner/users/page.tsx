@@ -108,8 +108,13 @@ export default function UsersPage() {
     if (!res.ok) {
       const isRateLimit = /rate.?limit|too many/i.test(data.error ?? '')
       flash('error', isRateLimit
-        ? '⚠️ Supabase email rate limit reached. Use "Get Link" to share a join link directly — no email needed.'
+        ? '⚠️ Email rate limit reached. Use "Get Invite Link" to share a join link directly — no email needed.'
         : (data.error ?? 'Failed to send invite email'))
+    } else if (data.email_failed && data.link) {
+      // Email delivery failed but API generated a fallback link
+      flash('error', data.message ?? 'Email failed — use the link below to invite this user.')
+      setInviteLink(data.link)
+      load()
     } else {
       flash('success', data.message)
       resetInviteForm()
