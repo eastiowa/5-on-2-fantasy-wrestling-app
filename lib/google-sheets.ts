@@ -1,4 +1,4 @@
-import { ScoreRow } from './scoring'
+import { CumulativeScoreRow } from './scoring'
 
 /**
  * Extracts the spreadsheet ID from a Google Sheets URL.
@@ -10,18 +10,20 @@ export function extractSheetId(url: string): string | null {
 }
 
 /**
- * Fetches rows from a Google Sheet using a service account.
+ * Fetches cumulative score rows from a Google Sheet using a service account.
  * The sheet must be shared with the service account email.
  *
  * Expected sheet columns (row 1 = headers):
- *   athlete_name | event | championship_wins | consolation_wins | bonus_points | placement
+ *   name | team | weight | place | score
+ *
+ * "score" is the cumulative total — uploaded rows OVERWRITE existing scores.
  */
 export async function fetchSheetScores(
   spreadsheetId: string,
-  range: string = 'Sheet1!A:F'
-): Promise<{ rows: ScoreRow[]; errors: string[] }> {
+  range: string = 'Sheet1!A:E'
+): Promise<{ rows: CumulativeScoreRow[]; errors: string[] }> {
   const errors: string[] = []
-  const rows: ScoreRow[] = []
+  const rows: CumulativeScoreRow[] = []
 
   const serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
@@ -32,7 +34,6 @@ export async function fetchSheetScores(
   }
 
   try {
-    // Create JWT for Google OAuth
     const token = await getGoogleAccessToken(serviceAccountEmail, privateKey)
 
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`
@@ -56,38 +57,42 @@ export async function fetchSheetScores(
 
     // Normalize headers
     const headers = values[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'))
-    const requiredHeaders = ['athlete_name', 'event', 'championship_wins', 'consolation_wins', 'bonus_points']
-    for (const h of requiredHeaders) {
-      if (!headers.includes(h)) {
-        errors.push(`Sheet is missing required column: "${h}"`)
-      }
+    if (!headers.includes('name') || !headers.includes('score')) {
+      errors.push('Sheet must have at least "name" and "score" columns.')
+      return { rows, errors }
     }
-    if (errors.length > 0) return { rows, errors }
 
-    const idx = (name: string) => headers.indexOf(name)
+    const idx = (col: string) => headers.indexOf(col)
 
     values.slice(1).forEach((row, i) => {
       const lineNum = i + 2
       const get = (col: string) => row[idx(col)]?.trim() ?? ''
 
-      const champWins = Number(get('championship_wins'))
-      const consolWins = Number(get('consolation_wins'))
-      const bonusPts = Number(get('bonus_points'))
-      const placementStr = get('placement')
-      const placement = placementStr ? Number(placementStr) : null
+      const name = get('name')
+      if (!name) { errors.push(`Row ${lineNum}: missing name — skipped`); return }
 
-      if (!get('athlete_name') || !get('event')) {
-        errors.push(`Row ${lineNum}: missing athlete_name or event — skipped`)
+      const scoreStr = get('score')
+      const score = Number(scoreStr)
+      if (!scoreStr || isNaN(score) || score < 0) {
+        errors.push(`Row ${lineNum}: invalid score for "${name}" — skipped`)
         return
       }
 
+      const placeStr = get('place')
+      const placeParsed = placeStr ? Number(placeStr) : null
+      const place = placeParsed && !isNaN(placeParsed) && placeParsed >= 1 && placeParsed <= 8
+        ? placeParsed : null
+
+      const weightStr = get('weight')
+      const weightParsed = weightStr ? Number(weightStr) : null
+      const weight = weightParsed && !isNaN(weightParsed) ? weightParsed : null
+
       rows.push({
-        athlete_name: get('athlete_name'),
-        event: get('event'),
-        championship_wins: isNaN(champWins) ? 0 : champWins,
-        consolation_wins: isNaN(consolWins) ? 0 : consolWins,
-        bonus_points: isNaN(bonusPts) ? 0 : bonusPts,
-        placement: placement && !isNaN(placement) && placement >= 1 && placement <= 8 ? placement : null,
+        name,
+        team: get('team'),
+        weight,
+        place,
+        score,
       })
     })
   } catch (err) {

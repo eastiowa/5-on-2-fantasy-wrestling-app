@@ -1,9 +1,17 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { fetchSheetScores } from '@/lib/google-sheets'
-import { extractSheetId } from '@/lib/google-sheets'
-import { calcPlacementPoints } from '@/lib/scoring'
+import { fetchSheetScores, extractSheetId } from '@/lib/google-sheets'
 
+/**
+ * POST /api/scores/sync-sheets
+ *
+ * Fetches cumulative scores from a Google Sheet and overwrites all existing
+ * scores for matched athletes.  Sheet must have columns: name, team, weight, place, score
+ *
+ * Same overwrite behaviour as the CSV upload route:
+ *   DELETE all score rows for the athlete → INSERT new row with bonus_points = score
+ *   (total_points generated column then automatically equals the cumulative score)
+ */
 export async function POST(req: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -26,28 +34,53 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Sheets fetch failed', details: errors }, { status: 400 })
   }
 
-  const { data: athletes } = await supabase.from('athletes').select('id, name')
-  const athleteMap = new Map((athletes ?? []).map((a) => [a.name.toLowerCase(), a.id]))
+  // Fetch all athletes (id, name, weight) for matching
+  const { data: athletes } = await supabase.from('athletes').select('id, name, weight')
+  if (!athletes?.length) {
+    return NextResponse.json({ error: 'No athletes found — upload athletes before scores.' }, { status: 400 })
+  }
+
+  // Build name → [{ id, weight }] lookup
+  const nameMap = new Map<string, { id: string; weight: number }[]>()
+  for (const a of athletes) {
+    const key = a.name.toLowerCase()
+    if (!nameMap.has(key)) nameMap.set(key, [])
+    nameMap.get(key)!.push({ id: a.id, weight: a.weight })
+  }
 
   const upserted: string[] = []
   const notFound: string[] = []
 
   for (const row of rows) {
-    const athleteId = athleteMap.get(row.athlete_name.toLowerCase())
-    if (!athleteId) { notFound.push(row.athlete_name); continue }
+    const candidates = nameMap.get(row.name.toLowerCase())
+    if (!candidates?.length) { notFound.push(row.name); continue }
 
-    const { error } = await supabase.from('scores').upsert({
+    let athleteId: string
+    if (candidates.length === 1) {
+      athleteId = candidates[0].id
+    } else if (row.weight) {
+      const match = candidates.find((c) => c.weight === row.weight)
+      athleteId = match ? match.id : candidates[0].id
+    } else {
+      athleteId = candidates[0].id
+    }
+
+    // Full overwrite: delete existing, insert new cumulative row
+    await supabase.from('scores').delete().eq('athlete_id', athleteId)
+
+    const { error } = await supabase.from('scores').insert({
       athlete_id: athleteId,
-      event: row.event,
-      championship_wins: row.championship_wins,
-      consolation_wins: row.consolation_wins,
-      bonus_points: row.bonus_points,
-      placement: row.placement,
-      placement_points: calcPlacementPoints(row.placement),
+      event: 'tournament',
+      championship_wins: 0,
+      consolation_wins: 0,
+      bonus_points: row.score,
+      placement: row.place ?? null,
+      placement_points: 0,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'athlete_id,event' })
+    })
 
-    if (!error) upserted.push(row.athlete_name)
+    if (!error) upserted.push(row.name)
+    else errors.push(`Failed to save score for "${row.name}": ${error.message}`)
   }
 
   return NextResponse.json({

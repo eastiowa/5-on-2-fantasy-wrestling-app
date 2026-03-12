@@ -121,8 +121,11 @@ export default function ScoresPage() {
         </div>
 
         <div className="bg-gray-950 rounded-lg p-3 text-xs font-mono text-gray-400">
-          athlete_name, event, championship_wins, consolation_wins, bonus_points, placement
+          name, team, weight, place, score
         </div>
+        <p className="text-xs text-gray-500">
+          Each upload <strong className="text-gray-300">overwrites</strong> all existing scores — upload the latest cumulative totals and all team standings will update automatically.
+        </p>
 
         <div
           className="border-2 border-dashed border-orange-600/40 rounded-lg p-6 text-center cursor-pointer hover:border-orange-500/70 transition-colors"
