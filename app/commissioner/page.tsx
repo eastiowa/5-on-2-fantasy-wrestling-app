@@ -41,7 +41,7 @@ export default async function CommissionerPage() {
     {
       href: '/commissioner/seasons',
       icon: CalendarDays,
-      label: 'Season Management',
+      label: 'Seasons',
       description: 'Create annual seasons, set current year, track history',
       count: currentSeason
         ? `${currentSeason.label} · ${currentSeason.status}`
@@ -50,21 +50,21 @@ export default async function CommissionerPage() {
     {
       href: '/commissioner/athletes',
       icon: Upload,
-      label: 'Manage Athletes',
+      label: 'Wrestlers',
       description: 'Upload athlete list via CSV, view or remove athletes',
       count: `${athleteCount ?? 0} athletes`,
     },
     {
       href: '/commissioner/teams',
       icon: Users,
-      label: 'Manage Teams',
-      description: 'Create teams, assign managers, send invite links',
+      label: 'Teams',
+      description: 'Create teams and assign verified users as managers',
       count: `${teamCount ?? 0}/10 teams`,
     },
     {
       href: '/commissioner/draft',
       icon: ClipboardList,
-      label: 'Draft Control',
+      label: 'Draft Controls',
       description: 'Set draft order, start/pause/override the draft',
       count: draftSettings
         ? `${draftSettings.status.charAt(0).toUpperCase() + draftSettings.status.slice(1)} — Pick #${draftSettings.current_pick_number}`
@@ -73,7 +73,7 @@ export default async function CommissionerPage() {
     {
       href: '/commissioner/scores',
       icon: BarChart3,
-      label: 'Score Management',
+      label: 'Scores',
       description: 'Upload CSV scores or sync from Google Sheets',
       count: 'Update scores',
     },
@@ -94,8 +94,8 @@ export default async function CommissionerPage() {
     {
       href: '/commissioner/users',
       icon: UserCog,
-      label: 'User Roles',
-      description: 'Promote or demote users to commissioner access',
+      label: 'Users',
+      description: 'Create accounts, manage roles, assign teams',
       count: `${commissionerCount ?? 0} commissioner${commissionerCount !== 1 ? 's' : ''}`,
     },
     {
