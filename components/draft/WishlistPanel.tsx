@@ -169,18 +169,18 @@ export function WishlistPanel({
       {/* Sort controls */}
       <div className="flex items-center gap-2">
         <ArrowUpDown className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-        <span className="text-xs text-gray-500">Sort:</span>
+        <span className="text-xs text-gray-500">Group by:</span>
         <button
           onClick={sortBySeed}
           className="px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors"
         >
-          By Seed
+          Seed
         </button>
         <button
           onClick={sortByWeight}
           className="px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors"
         >
-          By Weight
+          Weight
         </button>
       </div>
 
