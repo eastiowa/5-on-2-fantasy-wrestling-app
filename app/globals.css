@@ -1,43 +1,123 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Navy palette (replaces default gray scale) ── */
-  --color-gray-950: #08121e;
-  --color-gray-900: #0d1e35;
-  --color-gray-800: #162d4a;
-  --color-gray-700: #1f3c60;
-  --color-gray-600: #2e4f7a;
-  --color-gray-500: #5a7898;
-  --color-gray-400: #8aa4be;
-  --color-gray-300: #b4c8da;
-  --color-gray-200: #d0e0ec;
-  --color-gray-100: #e8f0f8;
+  /* ═══════════════════════════════════════════════════════
+     LIGHT IVORY THEME  — 5 on 2 Fantasy Wrestling
+     Background : Logo ivory  #F5EAD0
+     Primary text: Logo navy  #0d1e35
+     Accent gold : darkened   #b8780a
+     Accent orange:           #d94c1a  (unchanged — great on light bg)
+     ═══════════════════════════════════════════════════════
 
-  /* ── Logo gold (replaces yellow) ── */
+     Strategy: every component uses these custom tokens,
+     so redefining them here flips the whole app.
+
+     Gray mapping (was navy-dark → ivory-light):
+       gray-950 was  page bg  →  now ivory page bg
+       gray-900 was  card bg  →  now near-white card bg
+       gray-800 was  input bg →  now light-cream input bg
+       gray-700 was  border   →  now warm-tan border
+       gray-500 was  placeholder → now warm medium-brown placeholder
+       gray-400 was  secondary text → now warm brown secondary text
+       gray-300 was  body text     → now dark brown body text
+     white is redefined → logo navy so text-white = readable dark text
+  */
+
+  /* ── Gray scale → warm ivory palette ── */
+  --color-gray-950: #F5EAD0;   /* page background  — logo ivory          */
+  --color-gray-900: #FFFCF2;   /* card / panel background                 */
+  --color-gray-800: #F0E8D4;   /* input / secondary panel background      */
+  --color-gray-700: #CEBF9C;   /* borders / dividers                      */
+  --color-gray-600: #9E8E70;   /* muted elements / subtle ui              */
+  --color-gray-500: #78685A;   /* placeholder text / faint labels         */
+  --color-gray-400: #52402E;   /* secondary body text                     */
+  --color-gray-300: #332514;   /* primary body text                       */
+  --color-gray-200: #1E1508;   /* strong text / headings                  */
+  --color-gray-100: #0D0A04;   /* near-black (rarely used)                */
+
+  /* Redefine white → logo navy so text-white = readable dark heading text */
+  --color-white: #0d1e35;
+
+  /* ── Logo gold — darkened for contrast on light backgrounds ── */
   --color-yellow-50:  #fffbeb;
   --color-yellow-100: #fef3c7;
   --color-yellow-200: #fde68a;
-  --color-yellow-300: #ffc048;
-  --color-yellow-400: #f5a623;
-  --color-yellow-500: #e08d00;
+  --color-yellow-300: #d4910a;
+  --color-yellow-400: #b8780a;   /* primary accent — buttons, badges       */
+  --color-yellow-500: #9c6200;
+  --color-yellow-600: #f59e0b;
 
-  /* ── Logo orange-red ── */
+  /* Semantic yellow palette inverted so bg-yellow-950 panels are light */
+  --color-yellow-950: #fffbeb;
+  --color-yellow-900: #fef3c7;
+  --color-yellow-800: #fde68a;
+  --color-yellow-700: #fcd34d;
+
+  /* ── Amber ── */
+  --color-amber-400: #b8780a;
+  --color-amber-300: #d4910a;
+
+  /* ── Logo orange-red — unchanged, excellent on light backgrounds ── */
   --color-orange-400: #f07030;
   --color-orange-500: #e85c1e;
   --color-orange-600: #d94c1a;
   --color-orange-700: #b83c10;
   --color-orange-800: #8c2c08;
   --color-orange-900: #5c1c04;
-  --color-orange-950: #3a1002;
+  --color-orange-950: #fff4ed;   /* bg-orange-950 panels → light warm bg  */
 
-  /* ── Amber matches logo gold too ── */
-  --color-amber-400: #f5a623;
-  --color-amber-300: #ffc048;
+  /* ── Green — inverted so dark classes (950/900/800) = light bg ── */
+  --color-green-950: #f0fdf4;   /* panel background                       */
+  --color-green-900: #dcfce7;   /* hover background                       */
+  --color-green-800: #bbf7d0;   /* border                                 */
+  --color-green-700: #86efac;   /* active / bright element                */
+  --color-green-600: #4ade80;
+  --color-green-500: #22c55e;
+  --color-green-400: #16a34a;   /* text-green-400 → readable dark green   */
+  --color-green-300: #15803d;   /* text-green-300 → readable dark green   */
+  --color-green-200: #166534;
+  --color-green-100: #14532d;
+
+  /* ── Red — inverted ── */
+  --color-red-950: #fff1f2;     /* panel background                       */
+  --color-red-900: #ffe4e6;     /* hover background                       */
+  --color-red-800: #fecdd3;     /* border                                 */
+  --color-red-700: #fda4af;
+  --color-red-600: #fb7185;
+  --color-red-500: #f43f5e;
+  --color-red-400: #e11d48;     /* text-red-400 → readable dark red       */
+  --color-red-300: #be123c;     /* text-red-300 → readable dark red       */
+  --color-red-200: #9f1239;
+  --color-red-100: #881337;
+
+  /* ── Blue — inverted ── */
+  --color-blue-950: #eff6ff;    /* panel background                       */
+  --color-blue-900: #dbeafe;    /* hover background                       */
+  --color-blue-800: #bfdbfe;    /* border                                 */
+  --color-blue-700: #93c5fd;
+  --color-blue-600: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-400: #2563eb;    /* text-blue-400 → readable dark blue     */
+  --color-blue-300: #1d4ed8;    /* text-blue-300 → readable dark blue     */
+  --color-blue-200: #1e40af;
+  --color-blue-100: #1e3a8a;
+
+  /* ── Purple — inverted ── */
+  --color-purple-950: #faf5ff;  /* panel background                       */
+  --color-purple-900: #f3e8ff;  /* hover background                       */
+  --color-purple-800: #e9d5ff;  /* border                                 */
+  --color-purple-700: #d8b4fe;
+  --color-purple-600: #c084fc;
+  --color-purple-500: #a855f7;
+  --color-purple-400: #9333ea;  /* text-purple-400 → readable purple      */
+  --color-purple-300: #7e22ce;  /* text-purple-300 → readable purple      */
+  --color-purple-200: #6b21a8;
+  --color-purple-100: #581c87;
 }
 
 @layer base {
   body {
-    background-color: #08121e;
-    color: #f0f4f8;
+    background-color: #F5EAD0;  /* logo ivory */
+    color: #0d1e35;              /* logo navy  */
   }
 }
