@@ -43,28 +43,36 @@ function InviteAcceptInner() {
 
   useEffect(() => {
     async function verify() {
-      // ── PKCE flow: Supabase sends ?code= as a query param ─────────────────
-      const code = searchParams.get('code')
-      if (code) {
-        const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
-        if (exchangeError || !data.user) {
-          setError(exchangeError?.message ?? 'Invalid or expired invite link. Please contact your Commissioner.')
+      // ── Implicit flow: #access_token=...&type=invite in hash ──────────────
+      // (flowType:'implicit' on the browser client ensures invite links always
+      // use this path rather than the PKCE ?code= path.)
+      const hash = typeof window !== 'undefined' ? window.location.hash : ''
+      const hashParams = new URLSearchParams(hash.replace(/^#/, ''))
+      const accessToken = hashParams.get('access_token')
+      const refreshToken = hashParams.get('refresh_token') ?? ''
+      const type = hashParams.get('type')
+
+      if (accessToken && (type === 'invite' || type === 'recovery' || type === 'signup')) {
+        // Establish the session so subsequent API calls are authenticated
+        const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        if (sessionError || !sessionData.user) {
+          setError(sessionError?.message ?? 'Invalid or expired invite link. Please contact your Commissioner.')
         } else {
-          setInviteEmail(data.user.email ?? null)
+          setInviteEmail(sessionData.user.email ?? null)
         }
         setVerifying(false)
         return
       }
 
-      // ── Implicit flow: Supabase sends #access_token=...&type=invite ────────
-      const hashParams = new URLSearchParams(window.location.hash.replace('#', ''))
-      const accessToken = hashParams.get('access_token')
-      const type = hashParams.get('type')
-
-      if (type === 'invite' && accessToken) {
-        const { data } = await supabase.auth.getUser(accessToken)
-        if (!data.user) {
-          setError('Invalid or expired invite link. Please contact your Commissioner.')
+      // ── PKCE fallback: ?code= still handled if somehow present ────────────
+      const code = searchParams.get('code')
+      if (code) {
+        const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+        if (exchangeError || !data.user) {
+          setError(exchangeError?.message ?? 'Invalid or expired invite link. Please contact your Commissioner.')
         } else {
           setInviteEmail(data.user.email ?? null)
         }
@@ -85,25 +93,14 @@ function InviteAcceptInner() {
     setLoading(true)
     setError(null)
 
-    // For PKCE flow the session is already set by exchangeCodeForSession above.
-    // For implicit flow we need to manually set it from the hash.
-    const hashParams = new URLSearchParams(
-      typeof window !== 'undefined' ? window.location.hash.replace('#', '') : ''
-    )
-    const hashAccessToken = hashParams.get('access_token')
-    const hashRefreshToken = hashParams.get('refresh_token')
-    const isImplicitFlow = !!hashAccessToken && hashParams.get('type') === 'invite'
-
-    if (isImplicitFlow) {
-      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-        access_token: hashAccessToken!,
-        refresh_token: hashRefreshToken ?? '',
-      })
-      if (sessionError || !sessionData.user) {
-        setError(sessionError?.message ?? 'Failed to verify invite.')
-        setLoading(false)
-        return
-      }
+    // Session is already established during the verify() step above
+    // (either via setSession for implicit or exchangeCodeForSession for PKCE).
+    // Just verify it's still active before proceeding.
+    const { data: { user: currentUser } } = await supabase.auth.getUser()
+    if (!currentUser) {
+      setError('Session expired. Please ask the commissioner to resend the invite.')
+      setLoading(false)
+      return
     }
 
     // Update password
@@ -114,19 +111,11 @@ function InviteAcceptInner() {
       return
     }
 
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      setError('Session expired. Please ask the commissioner to resend the invite.')
-      setLoading(false)
-      return
-    }
-
     // Update display name in profile
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ display_name: displayName })
-      .eq('id', user.id)
+      .eq('id', currentUser.id)
 
     if (profileError) {
       setError(profileError.message)
