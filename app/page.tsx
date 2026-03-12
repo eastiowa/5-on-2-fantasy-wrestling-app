@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
 import { formatPoints, getRankSuffix } from '@/lib/utils'
 import { Trophy, Megaphone, TrendingUp, Users } from 'lucide-react'
 import Link from 'next/link'
@@ -68,10 +67,31 @@ async function getStandings() {
 }
 
 export default async function HomePage() {
-  // Require sign-in
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+
+  // Do NOT server-redirect unauthenticated users — Supabase invite links redirect
+  // here with #type=invite&access_token=... hash params that server redirects strip.
+  // The InviteRedirector client component (in layout) detects those and routes to
+  // /invite/accept before the user sees anything.  Plain unauthenticated visitors
+  // see the sign-in prompt below.
+  if (!user) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center">
+        <div className="text-center space-y-6 max-w-md">
+          <Trophy className="w-16 h-16 text-yellow-400 mx-auto" />
+          <h1 className="text-4xl font-bold text-white">5 on 2 Fantasy Wrestling</h1>
+          <p className="text-gray-400 text-lg">NCAA Tournament Fantasy League</p>
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-2 px-8 py-3 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded-xl text-lg transition-colors"
+          >
+            Sign In to View Standings →
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   const [{ standings, announcements, quickLinks }, { data: draftSettings }] = await Promise.all([
     getStandings(),
