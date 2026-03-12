@@ -64,7 +64,7 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
               <span className="font-bold text-base text-yellow-400 tracking-tight leading-none">
                 5 on 2 Fantasy Wrestling
               </span>
-              {currentSeasonLabel && (
+              {role && currentSeasonLabel && (
                 <div className="text-xs text-orange-400/80 leading-none mt-0.5">{currentSeasonLabel}</div>
               )}
             </div>
@@ -110,13 +110,15 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <button
-            className="md:hidden p-2 rounded-md text-gray-400 hover:text-orange-300 hover:bg-orange-600/20 transition-colors"
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          {/* Mobile menu button — only shown when there are nav links (i.e. signed in) */}
+          {role && (
+            <button
+              className="md:hidden p-2 rounded-md text-gray-400 hover:text-orange-300 hover:bg-orange-600/20 transition-colors"
+              onClick={() => setMenuOpen(!menuOpen)}
+            >
+              {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          )}
         </div>
       </div>
 
