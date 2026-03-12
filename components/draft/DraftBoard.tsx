@@ -96,7 +96,11 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
                         {pick ? (
                           <div className="space-y-0.5">
                             <div className="font-medium text-white leading-tight truncate max-w-[90px]">
-                              {pick.athlete?.name?.split(' ').pop()}
+                              {(() => {
+                                const parts = (pick.athlete?.name ?? '').trim().split(' ')
+                                if (parts.length < 2) return parts[0]
+                                return `${parts[0][0]}. ${parts.slice(1).join(' ')}`
+                              })()}
                             </div>
                             <div className="text-gray-500 text-[10px]">
                               {pick.athlete?.weight} · #{pick.athlete?.seed}
