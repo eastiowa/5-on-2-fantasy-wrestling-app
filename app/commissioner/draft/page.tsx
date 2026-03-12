@@ -13,7 +13,7 @@ export default async function CommissionerDraftPage() {
 
   const [{ data: settings }, { data: teamsRaw }, { data: picks }, { data: currentSeason }] = await Promise.all([
     supabase.from('draft_settings').select('*').maybeSingle(),
-    supabase.from('teams').select('*, manager:profiles(display_name, email)').order('name', { ascending: true }),
+    supabase.from('teams').select('*, manager:profiles!manager_id(display_name, email)').order('name', { ascending: true }),
     supabase.from('draft_picks').select('*, team:teams(name), athlete:athletes(name, weight, seed, school)').order('pick_number'),
     supabase.from('seasons').select('id').eq('is_current', true).maybeSingle(),
   ])
