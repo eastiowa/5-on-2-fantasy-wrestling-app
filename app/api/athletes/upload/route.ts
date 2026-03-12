@@ -46,17 +46,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No valid athletes in payload' }, { status: 400 })
   }
 
-  // Upsert by name+weight+season_id — same athlete can appear in different seasons
+  // ── Skip athletes already in this season (avoids needing a unique DB constraint) ──
+  const { data: existing } = await supabase
+    .from('athletes')
+    .select('name, weight')
+    .eq('season_id', currentSeason.id)
+
+  const existingKeys = new Set(
+    (existing ?? []).map((a) => `${a.name.toLowerCase()}|${a.weight}`)
+  )
+
+  const newAthletes = validated.filter(
+    (a) => !existingKeys.has(`${a.name.toLowerCase()}|${a.weight}`)
+  )
+
+  const skipped = validated.length - newAthletes.length
+
+  if (newAthletes.length === 0) {
+    return NextResponse.json({ inserted: 0, skipped, season: currentSeason.label })
+  }
+
   const { data, error } = await supabase
     .from('athletes')
-    .upsert(validated, { onConflict: 'name,weight,season_id', ignoreDuplicates: true })
+    .insert(newAthletes)
     .select()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({
     inserted: data?.length ?? 0,
-    skipped: validated.length - (data?.length ?? 0),
+    skipped,
     season: currentSeason.label,
   })
 }
