@@ -166,9 +166,6 @@ export default async function DashboardPage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold text-white">{team.name}</h1>
-          <p className="text-gray-400 mt-1">
-            Welcome back, {profile.display_name ?? user.email}
-          </p>
         </div>
         {draftSettings?.status === 'active' && (
           <Link
