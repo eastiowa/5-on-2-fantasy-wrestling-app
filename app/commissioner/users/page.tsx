@@ -152,7 +152,16 @@ export default function UsersPage() {
       flash('error', data.error ?? 'Failed to resend activation email')
       return
     }
-    flash('success', `Activation email resent to ${data.email}`)
+    if (data.already_confirmed) {
+      flash('error', `${data.email} is already confirmed — no email sent`)
+      return
+    }
+    if (data.email_queued) {
+      flash('success', `Activation email queued for ${data.email} (message ID: ${data.message_id})`)
+    } else {
+      // API returned success but no message_id — email provider may not have queued it
+      flash('error', `Request accepted but no message ID returned — check Supabase email logs to confirm delivery to ${data.email}`)
+    }
   }
 
   const commissioners = users.filter((u) => u.role === 'commissioner')
