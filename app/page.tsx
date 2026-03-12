@@ -4,6 +4,7 @@ import { formatPoints, getRankSuffix } from '@/lib/utils'
 import { Trophy, Megaphone, TrendingUp, Users } from 'lucide-react'
 import Link from 'next/link'
 import { Team, Announcement } from '@/types'
+import { DraftCountdown } from '@/components/shared/DraftCountdown'
 
 export const revalidate = 60 // Revalidate standings every 60 seconds
 
@@ -72,7 +73,15 @@ export default async function HomePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { standings, announcements, quickLinks } = await getStandings()
+  const [{ standings, announcements, quickLinks }, { data: draftSettings }] = await Promise.all([
+    getStandings(),
+    supabase.from('draft_settings').select('status, draft_start_date').maybeSingle(),
+  ])
+
+  const showCountdown =
+    draftSettings?.status === 'pending' &&
+    draftSettings?.draft_start_date &&
+    new Date(draftSettings.draft_start_date) > new Date()
 
   return (
     <div className="space-y-8">
@@ -84,6 +93,20 @@ export default async function HomePage() {
         </div>
         <p className="text-gray-400 text-lg">NCAA Tournament Fantasy League — Live Standings</p>
       </div>
+
+      {/* Draft countdown banner */}
+      {showCountdown && (
+        <div className="bg-gray-900 border border-yellow-400/30 rounded-xl px-6 py-5 flex items-center justify-between gap-6 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Trophy className="w-6 h-6 text-yellow-400 shrink-0" />
+            <div>
+              <div className="font-bold text-white text-lg">Draft Coming Up!</div>
+              <div className="text-sm text-gray-400">Get your wishlist ready before the draft begins.</div>
+            </div>
+          </div>
+          <DraftCountdown draftStartDate={draftSettings!.draft_start_date!} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Standings Table */}

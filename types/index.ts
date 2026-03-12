@@ -110,6 +110,7 @@ export interface DraftSettings {
   pick_started_at: string | null
   auto_skip_on_timeout: boolean
   snake_enabled: boolean
+  draft_start_date: string | null   // ISO timestamp — drives the countdown
   created_at: string
 }
 

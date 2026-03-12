@@ -10,6 +10,7 @@ import { WishlistPanel } from './WishlistPanel'
 import { DraftChat } from './DraftChat'
 import { DraftBoard } from './DraftBoard'
 import { AthleteRosterGrid } from './AthleteRosterGrid'
+import { DraftCountdown } from '@/components/shared/DraftCountdown'
 import { cn } from '@/lib/utils'
 import { formatPickLabel } from '@/lib/draft-logic'
 import { Trophy, Clock, Users, List, MessageSquare, BookmarkPlus, LayoutGrid } from 'lucide-react'
@@ -185,7 +186,9 @@ export function DraftRoom({
           <div className="text-yellow-400 font-bold">⏸ Draft Paused</div>
         )}
         {settings.status === 'pending' && (
-          <div className="text-gray-400">Draft has not started yet. Waiting for Commissioner.</div>
+          settings.draft_start_date && new Date(settings.draft_start_date) > new Date()
+            ? <DraftCountdown draftStartDate={settings.draft_start_date} />
+            : <div className="text-gray-400">Draft has not started yet. Waiting for Commissioner.</div>
         )}
         {settings.status === 'complete' && (
           <div className="flex items-center gap-2 text-blue-400 font-bold">

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 
-const BASE_FIELDS = ['pick_timer_seconds', 'auto_skip_on_timeout', 'snake_enabled']
+const BASE_FIELDS = ['pick_timer_seconds', 'auto_skip_on_timeout', 'snake_enabled', 'draft_start_date']
 const OVERNIGHT_FIELDS = ['overnight_pause_enabled', 'pause_start_hour', 'pause_end_hour']
 
 export async function PUT(req: Request) {

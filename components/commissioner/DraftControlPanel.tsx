@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { DraftSettings, DraftPick } from '@/types'
 import { buildFullDraftOrder } from '@/lib/draft-logic'
-import { Play, Pause, RotateCcw, SkipForward, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Play, Pause, RotateCcw, SkipForward, CheckCircle, AlertCircle, Loader2, CalendarClock, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { DraftCountdown } from '@/components/shared/DraftCountdown'
 
 interface DraftControlPanelProps {
   initialSettings: DraftSettings
@@ -16,6 +17,37 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
   const [settings, setSettings] = useState(initialSettings)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Draft start date state
+  // Convert stored ISO to local datetime-local value (yyyy-MM-ddTHH:mm)
+  const toLocalInput = (iso: string | null) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  const [startDateInput, setStartDateInput] = useState(() => toLocalInput(initialSettings.draft_start_date ?? null))
+  const [savingDate, setSavingDate] = useState(false)
+
+  async function saveStartDate() {
+    setSavingDate(true)
+    setMessage(null)
+    // Convert local datetime-local string back to ISO; empty = clear the date
+    const isoValue = startDateInput ? new Date(startDateInput).toISOString() : null
+    const res = await fetch('/api/draft/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ draft_start_date: isoValue }),
+    })
+    const data = await res.json()
+    setSavingDate(false)
+    if (!res.ok) {
+      setMessage({ type: 'error', text: data.error ?? 'Failed to save draft start date' })
+    } else {
+      setSettings((s) => ({ ...s, draft_start_date: isoValue }))
+      setMessage({ type: 'success', text: isoValue ? 'Draft start date saved' : 'Draft start date cleared' })
+    }
+  }
 
   const orderedTeams = [...teams].sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
   const fullOrder = orderedTeams.length === 10 ? buildFullDraftOrder(orderedTeams as any) : []
@@ -125,6 +157,51 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
           )}
         </div>
       </div>
+
+      {/* Draft Start Date — only shown when draft is pending */}
+      {settings.status === 'pending' && (
+        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-5 h-5 text-yellow-400" />
+            <h3 className="font-semibold text-white">Draft Start Date</h3>
+            <span className="text-xs text-gray-500 ml-1">— shown as a countdown to all league members</span>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="datetime-local"
+              value={startDateInput}
+              onChange={(e) => setStartDateInput(e.target.value)}
+              className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400"
+            />
+            <button
+              onClick={saveStartDate}
+              disabled={savingDate}
+              className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg text-sm transition-colors"
+            >
+              {savingDate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CalendarClock className="w-3.5 h-3.5" />}
+              Save
+            </button>
+            {startDateInput && (
+              <button
+                onClick={() => { setStartDateInput(''); saveStartDate() }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-lg text-sm transition-colors"
+                title="Clear date"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            )}
+          </div>
+
+          {/* Live countdown preview */}
+          {settings.draft_start_date && new Date(settings.draft_start_date) > new Date() && (
+            <div className="border-t border-gray-800 pt-4">
+              <DraftCountdown draftStartDate={settings.draft_start_date} />
+            </div>
+          )}
+        </div>
+      )}
 
       {orderedTeams.length < 10 && settings.status === 'pending' && (
         <div className="p-4 bg-yellow-950 border border-yellow-800 rounded-lg text-yellow-400 text-sm">
