@@ -245,10 +245,12 @@ export default function UsersPage() {
       flash('error', `${data.email} is already confirmed — no email sent`)
       return
     }
+    // Supabase's built-in email provider doesn't return a messageId — treat
+    // any success response (with or without messageId) as a successful send.
     if (data.email_queued) {
-      flash('success', `Activation email queued for ${data.email} (message ID: ${data.message_id})`)
+      flash('success', `Activation email sent to ${data.email} (message ID: ${data.message_id})`)
     } else {
-      flash('error', `Request accepted but no message ID returned — check Supabase email logs to confirm delivery to ${data.email}`)
+      flash('success', `Activation email sent to ${data.email} — ask them to check their inbox and spam folder.`)
     }
   }
 
