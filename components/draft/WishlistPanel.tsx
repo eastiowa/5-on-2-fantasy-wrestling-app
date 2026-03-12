@@ -10,7 +10,7 @@ import {
   SortableContext, verticalListSortingStrategy, useSortable, arrayMove
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, Trash2, Zap, Loader2, BookmarkPlus } from 'lucide-react'
+import { GripVertical, Trash2, Zap, Loader2, BookmarkPlus, ArrowUpDown } from 'lucide-react'
 
 interface WishlistPanelProps {
   wishlist: Array<WishlistItem & { athlete: Athlete }>
@@ -96,6 +96,27 @@ export function WishlistPanel({
 }: WishlistPanelProps) {
   const sensors = useSensors(useSensor(PointerSensor))
 
+  async function applySort(sorted: Array<WishlistItem & { athlete: Athlete }>) {
+    const reranked = sorted.map((item, idx) => ({ ...item, rank: idx + 1 }))
+    setWishlist(reranked)
+    await fetch('/api/draft/wishlist', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        items: reranked.map((i) => ({ id: i.id, rank: i.rank })),
+        team_id: teamId,
+      }),
+    })
+  }
+
+  function sortBySeed() {
+    applySort([...wishlist].sort((a, b) => (a.athlete?.seed ?? 99) - (b.athlete?.seed ?? 99)))
+  }
+
+  function sortByWeight() {
+    applySort([...wishlist].sort((a, b) => (a.athlete?.weight ?? 0) - (b.athlete?.weight ?? 0)))
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -145,6 +166,24 @@ export function WishlistPanel({
 
   return (
     <div className="space-y-3">
+      {/* Sort controls */}
+      <div className="flex items-center gap-2">
+        <ArrowUpDown className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+        <span className="text-xs text-gray-500">Sort:</span>
+        <button
+          onClick={sortBySeed}
+          className="px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors"
+        >
+          By Seed
+        </button>
+        <button
+          onClick={sortByWeight}
+          className="px-2.5 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors"
+        >
+          By Weight
+        </button>
+      </div>
+
       {isMyTurn && topAvailable && (
         <div className="px-4 py-3 bg-green-950/50 border border-green-800 rounded-lg text-sm">
           <span className="text-green-400 font-medium">Auto-pick ready: </span>
