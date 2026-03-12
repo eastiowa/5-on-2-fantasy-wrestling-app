@@ -79,9 +79,9 @@ export default async function HomePage() {
     return (
       <div className="min-h-[70vh] flex items-center justify-center">
         <div className="text-center space-y-6 max-w-md">
-          <Trophy className="w-16 h-16 text-yellow-400 mx-auto" />
-          <h1 className="text-4xl font-bold text-white">5 on 2 Fantasy Wrestling</h1>
-          <p className="text-gray-400 text-lg">NCAA Tournament Fantasy League</p>
+          <Trophy className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-400 mx-auto" />
+          <h1 className="text-2xl sm:text-4xl font-bold text-white">5 on 2 Fantasy Wrestling</h1>
+          <p className="text-gray-400 text-base sm:text-lg">NCAA Tournament Fantasy League</p>
           <Link
             href="/login"
             className="inline-flex items-center gap-2 px-8 py-3 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-bold rounded-xl text-lg transition-colors"
@@ -127,10 +127,10 @@ export default async function HomePage() {
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="flex items-center justify-center gap-3">
-          <Trophy className="w-10 h-10 text-yellow-400" />
-          <h1 className="text-4xl font-bold text-white">5 on 2 Fantasy Wrestling</h1>
+          <Trophy className="w-7 h-7 sm:w-10 sm:h-10 text-yellow-400" />
+          <h1 className="text-2xl sm:text-4xl font-bold text-white">5 on 2 Fantasy Wrestling</h1>
         </div>
-        <p className="text-gray-400 text-lg">NCAA Tournament Fantasy League — Live Standings</p>
+        <p className="text-gray-400 text-sm sm:text-lg">NCAA Tournament Fantasy League — Live Standings</p>
       </div>
 
       {/* Draft countdown banner */}

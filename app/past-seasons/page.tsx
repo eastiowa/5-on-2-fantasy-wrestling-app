@@ -58,7 +58,7 @@ export default async function PastSeasonsPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Trophy className="w-8 h-8 text-yellow-400 shrink-0" />
-        <h1 className="text-3xl font-bold text-white">Past Seasons</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">Past Seasons</h1>
       </div>
 
       {!seasons || seasons.length === 0 ? (

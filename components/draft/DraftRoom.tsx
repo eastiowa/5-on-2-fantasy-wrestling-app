@@ -155,9 +155,9 @@ export function DraftRoom({
   const remainingSecs = getRemainingSeconds(settings.pick_started_at, settings.pick_timer_seconds)
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex flex-col gap-4 max-w-7xl mx-auto">
+    <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100vh-8rem)] flex flex-col gap-3 max-w-7xl mx-auto">
       {/* Status bar */}
-      <div className={cn('rounded-xl border px-5 py-3 flex items-center gap-4',
+      <div className={cn('rounded-xl border px-3 sm:px-5 py-2.5 flex items-center gap-3 flex-wrap',
         settings.status === 'active' && isMyTurn ? 'bg-green-950/50 border-green-800' :
         settings.status === 'active' ? 'bg-gray-900 border-gray-800' :
         settings.status === 'paused' ? 'bg-yellow-950/50 border-yellow-800' :
@@ -173,11 +173,11 @@ export function DraftRoom({
               />
             )}
             <div className="flex-1 min-w-0">
-              <div className={cn('font-bold text-lg', isMyTurn ? 'text-green-400' : 'text-white')}>
-                {isMyTurn ? '🏆 YOUR TURN — ON THE CLOCK!' : `On the Clock: ${currentPickInfo.team_name}`}
+              <div className={cn('font-bold text-sm sm:text-lg leading-tight', isMyTurn ? 'text-green-400' : 'text-white')}>
+                {isMyTurn ? '🏆 YOUR TURN!' : `On the Clock: ${currentPickInfo.team_name}`}
               </div>
-              <div className="text-sm text-gray-400">
-                {formatPickLabel(settings.current_pick_number)} · {picks.length}/100 picks made
+              <div className="text-xs sm:text-sm text-gray-400">
+                {formatPickLabel(settings.current_pick_number)} · {picks.length}/100 picks
               </div>
             </div>
           </>
@@ -215,23 +215,23 @@ export function DraftRoom({
 
       {/* Main content */}
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-        {/* Mobile tabs */}
-        <div className="flex border-b border-gray-800 mb-4">
+        {/* Tabs */}
+        <div className="flex border-b border-gray-800 mb-3">
           {tabs.map(({ key, label, icon: Icon, badge }) => (
             <button
               key={key}
               onClick={() => setActiveTab(key)}
               className={cn(
-                'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors relative',
+                'flex-1 flex items-center justify-center gap-1 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-colors relative',
                 activeTab === key
                   ? 'text-yellow-400 border-b-2 border-yellow-400'
                   : 'text-gray-500 hover:text-gray-300'
               )}
             >
-              <Icon className="w-4 h-4" />
-              {label}
+              <Icon className="w-4 h-4 shrink-0" />
+              <span className="hidden xs:inline sm:inline truncate">{label}</span>
               {badge != null && (
-                <span className="bg-yellow-400 text-gray-900 text-xs font-bold px-1.5 py-0.5 rounded-full min-w-5 text-center">
+                <span className="bg-yellow-400 text-gray-900 text-[10px] font-bold px-1 py-0.5 rounded-full min-w-4 text-center leading-none">
                   {badge}
                 </span>
               )}

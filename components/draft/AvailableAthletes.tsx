@@ -124,7 +124,7 @@ export function AvailableAthletes({
               </button>
             )}
           </div>
-          <div className="grid grid-cols-11 gap-1.5">
+          <div className="grid grid-cols-11 gap-1">
             {ALL_SEEDS.map((seed) => {
               const checked = selectedSeeds.has(seed)
               return (
@@ -132,7 +132,7 @@ export function AvailableAthletes({
                   key={seed}
                   onClick={() => toggleSeed(seed)}
                   className={cn(
-                    'w-8 h-8 rounded text-xs font-semibold transition-colors',
+                    'w-7 h-7 sm:w-8 sm:h-8 rounded text-[10px] sm:text-xs font-semibold transition-colors',
                     checked
                       ? 'bg-yellow-400 text-gray-900'
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
