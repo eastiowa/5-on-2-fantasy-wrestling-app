@@ -48,16 +48,16 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
   return (
     <nav className="bg-gray-900 border-b-2 border-orange-600 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-14 gap-4">
+        <div className="flex items-center justify-between h-20 gap-4">
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity shrink-0">
+          <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity shrink-0">
             <Image
               src="/logo.png"
               alt="5 on 2 Fantasy Wrestling"
-              width={34}
-              height={34}
-              className="rounded object-contain"
+              width={68}
+              height={68}
+              className="rounded-lg object-contain"
               priority
             />
             <div className="hidden lg:block">
