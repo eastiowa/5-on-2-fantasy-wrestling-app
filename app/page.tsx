@@ -168,6 +168,17 @@ export default async function HomePage() {
               })}
             </div>
           )}
+
+          {/* Enter Draft button */}
+          <div className="border-t border-yellow-400/10 pt-4 flex">
+            <Link
+              href="/draft"
+              className="flex items-center gap-2 px-5 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg transition-colors text-sm"
+            >
+              <Trophy className="w-4 h-4" />
+              Enter Draft Room
+            </Link>
+          </div>
         </div>
       )}
 
