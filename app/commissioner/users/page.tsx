@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   UserCog, Shield, User, Loader2, CheckCircle, AlertCircle,
   Crown, Zap, Users, Trash2, Mail, Pencil, X, Check, MailCheck,
+  UserPlus, Link2, Copy,
 } from 'lucide-react'
 
 interface UserProfile {
@@ -31,9 +32,18 @@ export default function UsersPage() {
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  // ── Invite form state ──────────────────────────────────────────────────────
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteDisplayName, setInviteDisplayName] = useState('')
+  const [inviteTeamId, setInviteTeamId] = useState('')
+  const [sendingEmail, setSendingEmail] = useState(false)
+  const [generatingLink, setGeneratingLink] = useState(false)
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
+
   const flash = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text })
-    setTimeout(() => setMessage(null), 5000)
+    setTimeout(() => setMessage(null), 6000)
   }
 
   const load = useCallback(async () => {
@@ -68,6 +78,80 @@ export default function UsersPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
+
+  // ── Invite handlers ────────────────────────────────────────────────────────
+
+  function resetInviteForm() {
+    setInviteEmail('')
+    setInviteDisplayName('')
+    setInviteTeamId('')
+    setInviteLink(null)
+    setLinkCopied(false)
+  }
+
+  async function handleSendEmail() {
+    if (!inviteEmail.trim()) return
+    setSendingEmail(true)
+    setInviteLink(null)
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: inviteEmail.trim(),
+        display_name: inviteDisplayName.trim() || undefined,
+        team_id: inviteTeamId || undefined,
+        send_email: true,
+      }),
+    })
+    const data = await res.json()
+    setSendingEmail(false)
+    if (!res.ok) {
+      const isRateLimit = /rate.?limit|too many/i.test(data.error ?? '')
+      flash('error', isRateLimit
+        ? '⚠️ Supabase email rate limit reached. Use "Get Link" to share a join link directly — no email needed.'
+        : (data.error ?? 'Failed to send invite email'))
+    } else {
+      flash('success', data.message)
+      resetInviteForm()
+      load()
+    }
+  }
+
+  async function handleGetLink() {
+    if (!inviteEmail.trim()) return
+    setGeneratingLink(true)
+    setInviteLink(null)
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: inviteEmail.trim(),
+        display_name: inviteDisplayName.trim() || undefined,
+        team_id: inviteTeamId || undefined,
+        send_email: false,
+      }),
+    })
+    const data = await res.json()
+    setGeneratingLink(false)
+    if (!res.ok) {
+      flash('error', data.error ?? 'Failed to generate invite link')
+    } else if (data.link) {
+      setInviteLink(data.link)
+      load()
+    } else {
+      flash('error', 'No link returned from server')
+    }
+  }
+
+  function copyLink() {
+    if (!inviteLink) return
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2500)
+    })
+  }
+
+  // ── User management handlers ───────────────────────────────────────────────
 
   async function handleRoleChange(userId: string, newRole: 'commissioner' | 'team_manager') {
     setBusy(userId)
@@ -159,7 +243,6 @@ export default function UsersPage() {
     if (data.email_queued) {
       flash('success', `Activation email queued for ${data.email} (message ID: ${data.message_id})`)
     } else {
-      // API returned success but no message_id — email provider may not have queued it
       flash('error', `Request accepted but no message ID returned — check Supabase email logs to confirm delivery to ${data.email}`)
     }
   }
@@ -167,6 +250,7 @@ export default function UsersPage() {
   const commissioners = users.filter((u) => u.role === 'commissioner')
   const managers = users.filter((u) => u.role === 'team_manager')
   const isCurrentUserCommissioner = currentUserRole === 'commissioner'
+  const inviteBusy = sendingEmail || generatingLink
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -174,7 +258,7 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <UserCog className="w-8 h-8 text-yellow-400 shrink-0" />
-        <h1 className="text-3xl font-bold text-white">User Management</h1>
+        <h1 className="text-3xl font-bold text-white">Manage Users</h1>
       </div>
 
       {/* Toast */}
@@ -212,6 +296,127 @@ export default function UsersPage() {
                 : <Crown className="w-4 h-4" />}
               Claim Commissioner Role
             </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Create / Invite User ──────────────────────────────────────────────── */}
+      {isCurrentUserCommissioner && (
+        <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-5">
+          <div className="flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-yellow-400 shrink-0" />
+            <h2 className="font-semibold text-white text-lg">Add User</h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Email */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">
+                Email <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendEmail()}
+                placeholder="manager@example.com"
+                disabled={inviteBusy}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50"
+              />
+            </div>
+
+            {/* Display name */}
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Display Name <span className="text-gray-600">(optional)</span></label>
+              <input
+                type="text"
+                value={inviteDisplayName}
+                onChange={(e) => setInviteDisplayName(e.target.value)}
+                placeholder="e.g. Coach Miller"
+                disabled={inviteBusy}
+                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400 disabled:opacity-50"
+              />
+            </div>
+
+            {/* Team selection */}
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-gray-400 mb-1">Assign to Team <span className="text-gray-600">(optional)</span></label>
+              <select
+                value={inviteTeamId}
+                onChange={(e) => setInviteTeamId(e.target.value)}
+                disabled={inviteBusy}
+                className="w-full sm:w-64 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400 disabled:opacity-50"
+              >
+                <option value="">— No team assignment —</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.manager_id ? ' (already has manager)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={handleSendEmail}
+              disabled={inviteBusy || !inviteEmail.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors text-sm"
+            >
+              {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              Send Invite Email
+            </button>
+
+            <button
+              onClick={handleGetLink}
+              disabled={inviteBusy || !inviteEmail.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/40 text-white font-semibold rounded-lg transition-colors text-sm"
+            >
+              {generatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+              Get Invite Link
+            </button>
+
+            {(inviteEmail || inviteDisplayName || inviteTeamId || inviteLink) && (
+              <button
+                onClick={resetInviteForm}
+                disabled={inviteBusy}
+                className="px-3 py-2.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-500">
+            <strong className="text-gray-400">Send Invite Email</strong> — Supabase sends a magic link via email.{' '}
+            <strong className="text-gray-400">Get Invite Link</strong> — generates a one-time link you can share directly (no email sent).
+          </p>
+
+          {/* Generated link display */}
+          {inviteLink && (
+            <div className="space-y-2 pt-1">
+              <p className="text-xs text-green-400 font-medium">✓ Invite link ready — share this with the user:</p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={inviteLink}
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                  className="flex-1 px-3 py-2 bg-gray-800 border border-green-800 rounded-lg text-xs text-gray-300 focus:outline-none select-all"
+                />
+                <button
+                  onClick={copyLink}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                    linkCopied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                  }`}
+                >
+                  {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {linkCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p className="text-xs text-yellow-600">⚠️ Single-use link — expires after first use or in 7 days.</p>
+            </div>
           )}
         </div>
       )}
@@ -259,7 +464,7 @@ export default function UsersPage() {
             </div>
 
             {managers.length === 0 ? (
-              <p className="text-gray-500 text-sm px-1">No team managers yet.</p>
+              <p className="text-gray-500 text-sm px-1">No team managers yet. Use the form above to invite one.</p>
             ) : (
               managers.map((u) => (
                 <UserRow
@@ -284,7 +489,7 @@ export default function UsersPage() {
           <div className="bg-gray-900 border border-orange-600/10 rounded-xl p-4 text-sm text-gray-400 space-y-1">
             <p className="flex items-center gap-2 text-white font-medium text-xs uppercase tracking-wider mb-2">
               <Shield className="w-4 h-4 text-yellow-400" />
-              Commissioner Access
+              About Roles
             </p>
             <p>Commissioners have full access to all admin controls — seasons, athletes, teams, draft, scores, and announcements.</p>
             <p>Team managers only see the Draft Room and their own team dashboard.</p>
@@ -536,7 +741,6 @@ function UserRow({
             </button>
           )}
 
-          {/* Invite / email icon placeholder (visual context) */}
           {isSelf && (
             <span className="ml-auto flex items-center gap-1.5 text-xs text-gray-600">
               <Mail className="w-3.5 h-3.5" />

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Plus, Mail, Trash2, Loader2, AlertCircle, CheckCircle, User,
-  Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff, Link2, Copy,
-  ListOrdered, ChevronDown, Save, UserCheck, UserX
+  Plus, Trash2, Loader2, AlertCircle, CheckCircle, User,
+  Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff,
+  ListOrdered, UserCheck, UserX, ExternalLink, UserPlus,
 } from 'lucide-react'
 
 interface TeamWithManager {
@@ -16,28 +16,33 @@ interface TeamWithManager {
   manager: { id: string; display_name: string | null; email: string } | null
 }
 
+interface UserOption {
+  id: string
+  email: string
+  display_name: string | null
+  team_id: string | null
+}
+
 // ── TeamRow ──────────────────────────────────────────────────────────────────
 
 function TeamRow({
   team,
-  index,
+  users,
   onDelete,
-  onInvite,
   onRename,
   commissionerId,
   onClaim,
   onRelease,
-  onSaveManagerInfo,
+  onAssignUser,
 }: {
   team: TeamWithManager
-  index: number
+  users: UserOption[]
   onDelete: (id: string) => void
-  onInvite: (teamId: string, teamName: string) => void
   onRename: (id: string, newName: string) => Promise<void>
   commissionerId: string
   onClaim: (id: string) => Promise<void>
   onRelease: (id: string) => Promise<void>
-  onSaveManagerInfo: (teamId: string, managerId: string, patch: { display_name?: string; email?: string; team_name?: string }) => Promise<void>
+  onAssignUser: (teamId: string, userId: string | null) => Promise<void>
 }) {
   const [claiming, setClaiming] = useState(false)
   const isOwnedByCommissioner = team.manager?.id === commissionerId
@@ -46,6 +51,11 @@ function TeamRow({
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(team.name)
   const [saving, setSaving] = useState(false)
+
+  // Keep local state in sync if parent reloads
+  useEffect(() => {
+    if (!editing) setEditName(team.name)
+  }, [team.name, editing])
 
   async function commitRename() {
     const trimmed = editName.trim()
@@ -56,39 +66,54 @@ function TeamRow({
     setEditing(false)
   }
 
-  // ── Manager info edit panel ──────────────────────────────────────────────
-  const [panelOpen, setPanelOpen] = useState(false)
-  const [editDisplayName, setEditDisplayName] = useState(team.manager?.display_name ?? '')
-  const [editEmail, setEditEmail] = useState(team.manager?.email ?? '')
-  const [editTeamName, setEditTeamName] = useState(team.name)
-  const [savingInfo, setSavingInfo] = useState(false)
+  // ── Assign user panel state ──────────────────────────────────────────────
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState('')
+  const [assigning, setAssigning] = useState(false)
 
-  // Re-sync when team prop changes
-  useEffect(() => {
-    setEditDisplayName(team.manager?.display_name ?? '')
-    setEditEmail(team.manager?.email ?? '')
-    setEditTeamName(team.name)
-  }, [team])
-
-  async function handleSaveInfo() {
-    if (!team.manager) return
-    setSavingInfo(true)
-    const patch: { display_name?: string; email?: string; team_name?: string } = {}
-    if (editDisplayName.trim() !== (team.manager.display_name ?? '')) patch.display_name = editDisplayName.trim()
-    if (editEmail.trim() !== team.manager.email) patch.email = editEmail.trim()
-    if (editTeamName.trim() !== team.name) patch.team_name = editTeamName.trim()
-    await onSaveManagerInfo(team.id, team.manager.id, patch)
-    setSavingInfo(false)
-    setPanelOpen(false)
+  // Reset selection when panel opens
+  function openAssign() {
+    setSelectedUserId(team.manager_id ?? '')
+    setAssignOpen(true)
   }
+
+  async function handleSaveAssignment() {
+    setAssigning(true)
+    // If same as current, just close
+    if (selectedUserId === (team.manager_id ?? '')) {
+      setAssigning(false)
+      setAssignOpen(false)
+      return
+    }
+    await onAssignUser(team.id, selectedUserId || null)
+    setAssigning(false)
+    setAssignOpen(false)
+  }
+
+  async function handleRemoveAssignment() {
+    setAssigning(true)
+    await onAssignUser(team.id, null)
+    setAssigning(false)
+    setAssignOpen(false)
+  }
+
+  // Build user options for the dropdown
+  // Show all users; mark ones already assigned to a different team
+  const userOptions = users.map((u) => ({
+    ...u,
+    label: u.display_name ? `${u.display_name} (${u.email})` : u.email,
+    takenByOther: u.team_id !== null && u.team_id !== team.id,
+  }))
 
   return (
     <div className="bg-gray-800/50 rounded-lg border border-orange-600/20 overflow-hidden">
       {/* Main row */}
       <div className="flex items-center gap-3 p-4">
         {/* Draft position badge */}
-        <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-yellow-400 shrink-0"
-          title={team.draft_position ? `Draft position ${team.draft_position}` : 'No draft position set'}>
+        <div
+          className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-sm font-bold text-yellow-400 shrink-0"
+          title={team.draft_position ? `Draft position ${team.draft_position}` : 'No draft position set'}
+        >
           {team.draft_position ?? '—'}
         </div>
 
@@ -101,7 +126,10 @@ function TeamRow({
                 type="text"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setEditing(false); setEditName(team.name) } }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename()
+                  if (e.key === 'Escape') { setEditing(false); setEditName(team.name) }
+                }}
                 className="flex-1 px-2 py-1 bg-gray-700 border border-yellow-400/60 rounded text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
               />
               <button onClick={commitRename} disabled={saving} className="p-1 text-green-400 hover:text-green-300 disabled:opacity-50">
@@ -139,7 +167,7 @@ function TeamRow({
             ) : !team.manager ? (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-800 border border-gray-700 text-gray-500">
                 <UserX className="w-2.5 h-2.5" />
-                Not Registered
+                Not Assigned
               </span>
             ) : null}
           </div>
@@ -147,22 +175,19 @@ function TeamRow({
 
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          {/* Edit info panel toggle */}
-          {team.manager && (
-            <button
-              onClick={() => setPanelOpen((o) => !o)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg transition-colors ${
-                panelOpen
-                  ? 'bg-orange-950 text-orange-300 border-orange-800'
-                  : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'
-              }`}
-              title="Edit team & manager info"
-            >
-              <Pencil className="w-3 h-3" />
-              Edit Info
-              <ChevronDown className={`w-3 h-3 transition-transform ${panelOpen ? 'rotate-180' : ''}`} />
-            </button>
-          )}
+          {/* Assign user */}
+          <button
+            onClick={() => assignOpen ? setAssignOpen(false) : openAssign()}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg transition-colors ${
+              assignOpen
+                ? 'bg-orange-950 text-orange-300 border-orange-800'
+                : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'
+            }`}
+            title="Assign a user to manage this team"
+          >
+            <UserPlus className="w-3 h-3" />
+            Assign User
+          </button>
 
           {/* Commissioner claim / release */}
           {isOwnedByCommissioner ? (
@@ -186,14 +211,6 @@ function TeamRow({
           )}
 
           <button
-            onClick={() => onInvite(team.id, team.name)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-950 text-blue-400 border border-blue-800 rounded-lg hover:bg-blue-900 transition-colors"
-          >
-            <Mail className="w-3 h-3" />
-            {team.manager && !isOwnedByCommissioner ? 'Re-invite' : 'Invite Manager'}
-          </button>
-
-          <button
             onClick={() => onDelete(team.id)}
             className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded"
             title="Delete team"
@@ -203,67 +220,63 @@ function TeamRow({
         </div>
       </div>
 
-      {/* Edit info panel */}
-      {panelOpen && team.manager && (
-        <div className="border-t border-orange-600/20 bg-gray-900/60 px-5 py-4 space-y-4">
-          <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Edit Team &amp; Manager Info</p>
+      {/* Assign user panel */}
+      {assignOpen && (
+        <div className="border-t border-orange-600/20 bg-gray-900/60 px-5 py-4 space-y-3">
+          <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Assign Manager</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Team name */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Team Name</label>
-              <input
-                type="text"
-                value={editTeamName}
-                onChange={(e) => setEditTeamName(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
-              />
-            </div>
-
-            {/* Manager display name */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Manager Display Name</label>
-              <input
-                type="text"
-                value={editDisplayName}
-                onChange={(e) => setEditDisplayName(e.target.value)}
-                placeholder="e.g. Coach Miller"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
-              />
-            </div>
-
-            {/* Manager email */}
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Manager Email</label>
-              <input
-                type="email"
-                value={editEmail}
-                onChange={(e) => setEditEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-1 focus:ring-yellow-400"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3">
-            <button
-              onClick={handleSaveInfo}
-              disabled={savingInfo}
-              className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg text-sm transition-colors"
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              value={selectedUserId}
+              onChange={(e) => setSelectedUserId(e.target.value)}
+              disabled={assigning}
+              className="flex-1 max-w-sm px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400 disabled:opacity-50"
             >
-              {savingInfo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              Save Changes
-            </button>
+              <option value="">— No manager —</option>
+              {userOptions.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.label}{u.takenByOther ? ' ⚠ assigned to another team' : ''}
+                </option>
+              ))}
+            </select>
+
             <button
-              onClick={() => setPanelOpen(false)}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-sm transition-colors"
+              onClick={handleSaveAssignment}
+              disabled={assigning}
+              className="flex items-center gap-1.5 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg text-sm transition-colors"
+            >
+              {assigning ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Save
+            </button>
+
+            {team.manager_id && (
+              <button
+                onClick={handleRemoveAssignment}
+                disabled={assigning}
+                className="flex items-center gap-1.5 px-3 py-2 bg-gray-800 hover:bg-red-900/40 text-gray-400 hover:text-red-400 border border-gray-700 rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                <X className="w-3.5 h-3.5" />
+                Remove
+              </button>
+            )}
+
+            <button
+              onClick={() => setAssignOpen(false)}
+              className="px-3 py-2 text-gray-500 hover:text-gray-300 text-sm transition-colors"
             >
               Cancel
             </button>
           </div>
 
-          <p className="text-xs text-yellow-700">
-            ⚠️ Changing the email address updates the manager&apos;s login email. They may need to verify the new address.
-          </p>
+          {users.length === 0 && (
+            <p className="text-xs text-yellow-600">
+              No registered users yet.{' '}
+              <a href="/commissioner/users" className="underline hover:text-yellow-400">
+                Go to User Management
+              </a>{' '}
+              to create accounts first.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -274,39 +287,42 @@ function TeamRow({
 
 export function TeamsManager({ commissionerId }: { commissionerId: string }) {
   const [teams, setTeams] = useState<TeamWithManager[]>([])
+  const [users, setUsers] = useState<UserOption[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [newTeamName, setNewTeamName] = useState('')
   const [creating, setCreating] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteTeamId, setInviteTeamId] = useState<string | null>(null)
-  const [inviteTeamName, setInviteTeamName] = useState('')
-  const [inviting, setInviting] = useState(false)
-  const [generatingLink, setGeneratingLink] = useState(false)
-  const [generatedLink, setGeneratedLink] = useState<string | null>(null)
-  const [generatedLinkExpiry, setGeneratedLinkExpiry] = useState<string | null>(null)
-  const [linkCopied, setLinkCopied] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-  const fetchTeams = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true)
     setFetchError(null)
     try {
-      const res = await fetch('/api/teams')
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setFetchError(data.error ?? `Failed to load teams (${res.status})`)
+      const [teamsRes, usersRes] = await Promise.all([
+        fetch('/api/teams'),
+        fetch('/api/users'),
+      ])
+
+      if (!teamsRes.ok) {
+        const data = await teamsRes.json().catch(() => ({}))
+        setFetchError(data.error ?? `Failed to load teams (${teamsRes.status})`)
       } else {
-        setTeams(await res.json())
+        setTeams(await teamsRes.json())
+      }
+
+      if (usersRes.ok) {
+        const usersData = await usersRes.json()
+        const userList: UserOption[] = Array.isArray(usersData.users) ? usersData.users : []
+        setUsers(userList)
       }
     } catch {
-      setFetchError('Network error — could not load teams.')
+      setFetchError('Network error — could not load data.')
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { fetchTeams() }, [fetchTeams])
+  useEffect(() => { fetchAll() }, [fetchAll])
 
   async function handleCreate() {
     if (!newTeamName.trim() || teams.length >= 10) return
@@ -340,7 +356,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
 
   async function handleClaim(teamId: string) {
     const res = await fetch(`/api/teams/${teamId}/claim`, { method: 'POST' })
-    if (res.ok) { await fetchTeams() }
+    if (res.ok) { await fetchAll() }
     else {
       const data = await res.json().catch(() => ({}))
       setMessage({ type: 'error', text: data.error ?? 'Failed to claim team.' })
@@ -349,7 +365,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
 
   async function handleRelease(teamId: string) {
     const res = await fetch(`/api/teams/${teamId}/claim`, { method: 'DELETE' })
-    if (res.ok) { await fetchTeams() }
+    if (res.ok) { await fetchAll() }
     else {
       const data = await res.json().catch(() => ({}))
       setMessage({ type: 'error', text: data.error ?? 'Failed to release team.' })
@@ -370,116 +386,39 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
     }
   }
 
-  async function handleSaveManagerInfo(
-    teamId: string,
-    managerId: string,
-    patch: { display_name?: string; email?: string; team_name?: string }
-  ) {
-    const errors: string[] = []
-
-    // Update team name if changed
-    if (patch.team_name) {
-      const res = await fetch(`/api/teams/${teamId}`, {
+  // Assign or remove a user from a team via PATCH /api/users/[userId]
+  async function handleAssignUser(teamId: string, userId: string | null) {
+    if (userId) {
+      // Assign this user to the team (clears any previous team they had)
+      const res = await fetch(`/api/users/${userId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: patch.team_name }),
+        body: JSON.stringify({ team_id: teamId }),
       })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        errors.push(d.error ?? 'Failed to rename team')
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'Manager assigned successfully.' })
+        await fetchAll()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setMessage({ type: 'error', text: data.error ?? 'Failed to assign manager.' })
       }
-    }
-
-    // Update manager profile (display_name and/or email)
-    if (patch.display_name !== undefined || patch.email !== undefined) {
-      const userPatch: Record<string, string> = {}
-      if (patch.display_name !== undefined) userPatch.display_name = patch.display_name
-      if (patch.email !== undefined) userPatch.email = patch.email
-
-      const res = await fetch(`/api/users/${managerId}`, {
+    } else {
+      // Remove — find who currently manages this team and clear their team_id
+      const team = teams.find((t) => t.id === teamId)
+      if (!team?.manager_id) return
+      const res = await fetch(`/api/users/${team.manager_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userPatch),
+        body: JSON.stringify({ team_id: null }),
       })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        errors.push(d.error ?? 'Failed to update manager info')
+      if (res.ok) {
+        setMessage({ type: 'success', text: 'Manager removed from team.' })
+        await fetchAll()
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setMessage({ type: 'error', text: data.error ?? 'Failed to remove manager.' })
       }
     }
-
-    if (errors.length > 0) {
-      setMessage({ type: 'error', text: errors.join(' · ') })
-    } else {
-      setMessage({ type: 'success', text: 'Team info updated successfully' })
-      await fetchTeams()
-    }
-  }
-
-  function openInvite(teamId: string, teamName: string) {
-    setInviteTeamId(teamId)
-    setInviteTeamName(teamName)
-    setInviteEmail('')
-    setGeneratedLink(null)
-    setGeneratedLinkExpiry(null)
-    setLinkCopied(false)
-    setMessage(null)
-  }
-
-  async function handleInvite() {
-    if (!inviteEmail.trim() || !inviteTeamId) return
-    setInviting(true)
-    setMessage(null)
-    const res = await fetch('/api/teams/invite', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: inviteEmail.trim(), team_id: inviteTeamId }),
-    })
-    const data = await res.json()
-    setInviting(false)
-    if (!res.ok) {
-      const isRateLimit = /rate.?limit|too many/i.test(data.error ?? '')
-      setMessage({
-        type: 'error',
-        text: isRateLimit
-          ? '⚠️ Supabase email rate limit reached. Use "Get Link" above to share a join link directly — no email needed.'
-          : data.error,
-      })
-    } else {
-      setMessage({ type: 'success', text: data.message })
-      setInviteTeamId(null)
-      setInviteEmail('')
-    }
-  }
-
-  async function handleGetLink() {
-    if (!inviteTeamId) return
-    setGeneratingLink(true)
-    setGeneratedLink(null)
-    setGeneratedLinkExpiry(null)
-    setMessage(null)
-    const res = await fetch('/api/invite-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ team_id: inviteTeamId }),
-    })
-    const data = await res.json()
-    setGeneratingLink(false)
-    if (!res.ok) {
-      setMessage({ type: 'error', text: data.error ?? 'Failed to generate link' })
-    } else if (data.url) {
-      setGeneratedLink(data.url)
-      setGeneratedLinkExpiry(data.expires_at ?? null)
-    } else {
-      setMessage({ type: 'error', text: 'No link returned from server' })
-    }
-  }
-
-  function copyLink() {
-    if (!generatedLink) return
-    navigator.clipboard.writeText(generatedLink).then(() => {
-      setLinkCopied(true)
-      setTimeout(() => setLinkCopied(false), 2500)
-    })
   }
 
   if (loading) {
@@ -499,7 +438,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
           <p className="text-red-300 font-semibold">Failed to load teams</p>
           <p className="text-red-400 text-sm mt-1">{fetchError}</p>
         </div>
-        <button onClick={fetchTeams} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors shrink-0">
+        <button onClick={fetchAll} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-colors shrink-0">
           <RefreshCw className="w-3 h-3" />
           Retry
         </button>
@@ -520,6 +459,18 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
           {message.text}
         </div>
       )}
+
+      {/* Users page callout */}
+      <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-950/40 rounded-lg border border-blue-700/30 text-xs text-blue-300">
+        <User className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+        <span>
+          To create or invite user accounts, go to{' '}
+          <a href="/commissioner/users" className="underline font-medium text-blue-400 inline-flex items-center gap-0.5 hover:text-blue-300">
+            User Management <ExternalLink className="w-3 h-3" />
+          </a>
+          . Once a user is registered, use the <strong className="text-blue-300">Assign User</strong> button on each team below to link them.
+        </span>
+      </div>
 
       {/* Create team */}
       {teams.length < 10 && (
@@ -547,83 +498,6 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
         </div>
       )}
 
-      {/* Invite modal */}
-      {inviteTeamId && (
-        <div className="bg-gray-900 rounded-xl border border-yellow-400/30 p-6 space-y-4">
-          <div className="flex items-center justify-between gap-4">
-            <h3 className="font-semibold text-white">
-              Invite Manager — <span className="text-yellow-400">{inviteTeamName}</span>
-            </h3>
-            <button onClick={() => { setInviteTeamId(null); setGeneratedLink(null) }} className="text-gray-500 hover:text-gray-300 transition-colors">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Get Link */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleGetLink}
-              disabled={inviting || generatingLink}
-              className="flex items-center gap-2 px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/40 text-white font-semibold rounded-lg transition-colors text-sm"
-            >
-              {generatingLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
-              Get Link
-            </button>
-            <p className="text-xs text-gray-500">No email required — manager registers with their own email on the join page.</p>
-          </div>
-
-          {generatedLink && (
-            <div className="space-y-2">
-              <p className="text-xs text-green-400 font-medium">✓ Invite link ready — share this with the manager:</p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={generatedLink}
-                  className="flex-1 px-3 py-2 bg-gray-800 border border-green-800 rounded-lg text-xs text-gray-300 focus:outline-none select-all"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                />
-                <button
-                  onClick={copyLink}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                    linkCopied ? 'bg-green-700 text-green-200' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-                  }`}
-                >
-                  {linkCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  {linkCopied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-              <p className="text-xs text-yellow-600">
-                ⚠️ Single-use link · expires {generatedLinkExpiry ? new Date(generatedLinkExpiry).toLocaleDateString() : 'in 7 days'}
-              </p>
-            </div>
-          )}
-
-          {/* Send Email */}
-          <div className="border-t border-gray-800 pt-4 space-y-3">
-            <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Or send a Supabase invite email</p>
-            <div className="flex gap-2 flex-wrap">
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
-                placeholder="manager@example.com"
-                className="flex-1 min-w-48 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-              />
-              <button
-                onClick={handleInvite}
-                disabled={inviting || !inviteEmail.trim()}
-                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors text-sm"
-              >
-                {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                Send Email
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Teams list */}
       {teams.length > 0 ? (
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-6 space-y-4">
@@ -631,7 +505,7 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             <h3 className="font-semibold text-white">
               Teams <span className="text-gray-500 font-normal text-sm">({teams.length}/10)</span>
             </h3>
-            <button onClick={fetchTeams} className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg" title="Refresh teams">
+            <button onClick={fetchAll} className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg" title="Refresh teams">
               <RefreshCw className="w-4 h-4" />
             </button>
           </div>
@@ -641,23 +515,22 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             <span>
               The number badge shows each team&apos;s draft position for the current season.
               To set or change draft order, go to <strong className="text-gray-300">Season Management → Draft Order</strong>.
-              Use <strong className="text-gray-300">Edit Info</strong> to update team name, manager name, or email.
+              Use <strong className="text-gray-300">Assign User</strong> to link a registered user as the team&apos;s manager.
             </span>
           </div>
 
           <div className="space-y-2">
-            {teams.map((team, i) => (
+            {teams.map((team) => (
               <TeamRow
                 key={team.id}
                 team={team}
-                index={i}
+                users={users}
                 onDelete={handleDelete}
-                onInvite={openInvite}
                 onRename={handleRename}
                 commissionerId={commissionerId}
                 onClaim={handleClaim}
                 onRelease={handleRelease}
-                onSaveManagerInfo={handleSaveManagerInfo}
+                onAssignUser={handleAssignUser}
               />
             ))}
           </div>
