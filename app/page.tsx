@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatPoints, getRankSuffix } from '@/lib/utils'
-import { Trophy, Megaphone, TrendingUp, Users } from 'lucide-react'
+import { Trophy, Megaphone, TrendingUp, Users, CalendarDays, User, Crown } from 'lucide-react'
 import Link from 'next/link'
 import { Team, Announcement } from '@/types'
 import { DraftCountdown } from '@/components/shared/DraftCountdown'
@@ -93,9 +93,15 @@ export default async function HomePage() {
     )
   }
 
-  // Fetch current season id for draft order lookup
+  // Fetch current season + user profile in parallel with other data
   const { data: currentSeason } = await supabase
-    .from('seasons').select('id').eq('is_current', true).maybeSingle()
+    .from('seasons').select('id, label, status, year').eq('is_current', true).maybeSingle()
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name, role, team_id, team:teams!profiles_team_id_fkey(name)')
+    .eq('id', user.id)
+    .single()
 
   const [{ standings, announcements, quickLinks }, { data: draftSettings }, { data: draftOrderRaw }] = await Promise.all([
     getStandings(),
@@ -122,15 +128,63 @@ export default async function HomePage() {
     draftSettings?.draft_start_date &&
     new Date(draftSettings.draft_start_date) > new Date()
 
+  const seasonStatusColor = (s: string | undefined) => {
+    if (s === 'active')    return 'bg-green-950 border-green-800 text-green-300'
+    if (s === 'drafting')  return 'bg-purple-950 border-purple-800 text-purple-300'
+    if (s === 'complete')  return 'bg-blue-950 border-blue-800 text-blue-300'
+    return 'bg-gray-800 border-gray-700 text-gray-300'
+  }
+
+  const teamName = (profile?.team as any)?.name as string | undefined
+
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="text-center space-y-2">
-        <div className="flex items-center justify-center gap-3">
-          <Trophy className="w-7 h-7 sm:w-10 sm:h-10 text-yellow-400" />
-          <h1 className="text-2xl sm:text-4xl font-bold text-white">5 on 2 Fantasy Wrestling</h1>
+      {/* Info cards — Current Season + User */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+        {/* Current Season */}
+        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5 space-y-3">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+            <CalendarDays className="w-3.5 h-3.5" /> Current Season
+          </h3>
+          {currentSeason ? (
+            <div className="space-y-2">
+              <div className="font-semibold text-white text-lg">{currentSeason.label}</div>
+              <span className={`inline-block text-xs px-2.5 py-0.5 rounded-full font-semibold capitalize border ${seasonStatusColor(currentSeason.status)}`}>
+                {currentSeason.status}
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No active season set.</p>
+          )}
         </div>
-        <p className="text-gray-400 text-sm sm:text-lg">NCAA Tournament Fantasy League — Live Standings</p>
+
+        {/* User info */}
+        <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5 space-y-3">
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+            <User className="w-3.5 h-3.5" /> My Account
+          </h3>
+          <div className="space-y-1.5">
+            <div className="font-semibold text-white text-lg">
+              {profile?.display_name ?? user.email?.split('@')[0]}
+            </div>
+            <div className="text-xs text-gray-500">{user.email}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-semibold border ${
+                profile?.role === 'commissioner'
+                  ? 'bg-yellow-950 border-yellow-700 text-yellow-300'
+                  : 'bg-gray-800 border-gray-700 text-gray-300'
+              }`}>
+                {profile?.role === 'commissioner' ? <><Crown className="w-3 h-3" /> Commissioner</> : 'Team Manager'}
+              </span>
+              {teamName && (
+                <span className="text-xs text-gray-400 flex items-center gap-1">
+                  <Users className="w-3 h-3" /> {teamName}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Draft countdown banner */}
