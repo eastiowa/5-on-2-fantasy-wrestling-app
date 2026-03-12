@@ -9,9 +9,10 @@ import { AvailableAthletes } from './AvailableAthletes'
 import { WishlistPanel } from './WishlistPanel'
 import { DraftChat } from './DraftChat'
 import { DraftBoard } from './DraftBoard'
+import { AthleteRosterGrid } from './AthleteRosterGrid'
 import { cn } from '@/lib/utils'
 import { formatPickLabel } from '@/lib/draft-logic'
-import { Trophy, Clock, Users, List, MessageSquare, BookmarkPlus } from 'lucide-react'
+import { Trophy, Clock, Users, List, MessageSquare, BookmarkPlus, LayoutGrid } from 'lucide-react'
 
 interface DraftRoomProps {
   initialSettings: DraftSettings
@@ -26,7 +27,7 @@ interface DraftRoomProps {
   userName: string
 }
 
-type TabKey = 'athletes' | 'wishlist' | 'board' | 'chat'
+type TabKey = 'athletes' | 'wishlist' | 'board' | 'chat' | 'grid'
 
 export function DraftRoom({
   initialSettings,
@@ -143,6 +144,7 @@ export function DraftRoom({
 
   const tabs: { key: TabKey; label: string; icon: React.ElementType; badge?: number }[] = [
     { key: 'athletes', label: 'Athletes', icon: Users },
+    { key: 'grid', label: 'Grid', icon: LayoutGrid },
     { key: 'wishlist', label: 'My Queue', icon: BookmarkPlus, badge: wishlist.length || undefined },
     { key: 'board', label: 'Board', icon: List },
     { key: 'chat', label: 'Chat', icon: MessageSquare, badge: messages.filter((m) => !m.is_system).length || undefined },
@@ -262,6 +264,16 @@ export function DraftRoom({
               picking={picking}
               onPick={handlePick}
               teamId={userTeamId}
+            />
+          )}
+          {activeTab === 'grid' && (
+            <AthleteRosterGrid
+              athletes={athletes}
+              picks={picks}
+              userTeamId={userTeamId}
+              isMyTurn={isMyTurn && settings.status === 'active'}
+              picking={picking}
+              onPick={handlePick}
             />
           )}
           {activeTab === 'board' && (
