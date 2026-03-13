@@ -155,6 +155,18 @@ export function DraftRoom({
     }
   }, [userTeamId])
 
+  const handleRemoveFromWishlist = useCallback(async (athleteId: string) => {
+    const item = wishlist.find((w) => w.athlete_id === athleteId)
+    if (!item) return
+    // Optimistic removal
+    setWishlist((prev) => prev.filter((w) => w.athlete_id !== athleteId))
+    await fetch('/api/draft/wishlist', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: item.id, team_id: userTeamId }),
+    })
+  }, [wishlist, userTeamId])
+
   const handlePick = useCallback(async (athleteId: string) => {
     setPicking(true)
     setPickError(null)
@@ -290,6 +302,7 @@ export function DraftRoom({
               wishlistIds={new Set(wishlist.map((w) => w.athlete_id))}
               flags={flags}
               onToggleFlag={handleToggleFlag}
+              onRemoveFromWishlist={handleRemoveFromWishlist}
             />
           )}
           {activeTab === 'wishlist' && (
@@ -326,6 +339,7 @@ export function DraftRoom({
               }}
               flags={flags}
               onToggleFlag={handleToggleFlag}
+              onRemoveFromWishlist={handleRemoveFromWishlist}
             />
           )}
           {activeTab === 'board' && (

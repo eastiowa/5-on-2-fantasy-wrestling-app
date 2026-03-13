@@ -17,6 +17,7 @@ interface AthleteRosterGridProps {
   onAddToWishlist: (athleteId: string) => Promise<void>
   flags: Map<string, FlagValue>
   onToggleFlag: (athleteId: string, flag: FlagValue) => void
+  onRemoveFromWishlist: (athleteId: string) => void
 }
 
 /**
@@ -39,6 +40,7 @@ export function AthleteRosterGrid({
   onAddToWishlist,
   flags,
   onToggleFlag,
+  onRemoveFromWishlist,
 }: AthleteRosterGridProps) {
   const [addingWishlist, setAddingWishlist] = useState<string | null>(null)
   const [hoverCell, setHoverCell] = useState<string | null>(null)
@@ -190,16 +192,23 @@ export function AthleteRosterGrid({
                         </div>
                       )}
 
-                      {/* Wishlist bookmark */}
+                      {/* Wishlist toggle — add or remove */}
                       {!isDrafted && userTeamId && (
                         <button
-                          onClick={(e) => !inWishlist && handleWishlist(e, athlete.id)}
-                          disabled={inWishlist || isAddingWishlist}
-                          title={inWishlist ? 'In your queue' : 'Add to queue'}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (inWishlist) {
+                              onRemoveFromWishlist(athlete.id)
+                            } else {
+                              handleWishlist(e, athlete.id)
+                            }
+                          }}
+                          disabled={isAddingWishlist}
+                          title={inWishlist ? 'Remove from queue' : 'Add to queue'}
                           className={cn(
                             'absolute top-0 right-0 p-0.5 rounded transition-colors',
                             inWishlist
-                              ? 'text-yellow-400 opacity-100'
+                              ? 'text-yellow-400 opacity-100 hover:text-red-400'
                               : 'text-gray-600 opacity-0 group-hover:opacity-100 hover:text-yellow-400'
                           )}
                         >

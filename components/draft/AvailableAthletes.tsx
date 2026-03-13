@@ -20,6 +20,7 @@ interface AvailableAthletesProps {
   wishlistIds: Set<string>
   flags: Map<string, FlagValue>
   onToggleFlag: (athleteId: string, flag: FlagValue) => void
+  onRemoveFromWishlist: (athleteId: string) => void
 }
 
 export function AvailableAthletes({
@@ -33,6 +34,7 @@ export function AvailableAthletes({
   wishlistIds,
   flags,
   onToggleFlag,
+  onRemoveFromWishlist,
 }: AvailableAthletesProps) {
   const [search, setSearch] = useState('')
   const [filterWeight, setFilterWeight] = useState<number | 'all'>('all')
@@ -236,17 +238,17 @@ export function AvailableAthletes({
                     })}
                   </div>
 
-                  {/* Add to wishlist */}
+                  {/* Wishlist toggle — add or remove */}
                   <button
-                    onClick={() => handleWishlist(athlete.id)}
-                    disabled={inWishlist || addingToWishlist === athlete.id || !userTeamId}
+                    onClick={() => inWishlist ? onRemoveFromWishlist(athlete.id) : handleWishlist(athlete.id)}
+                    disabled={addingToWishlist === athlete.id || !userTeamId}
                     className={cn(
                       'p-1.5 rounded transition-colors',
                       inWishlist
-                        ? 'text-yellow-400 bg-yellow-400/10'
+                        ? 'text-yellow-400 bg-yellow-400/10 hover:text-red-400 hover:bg-red-400/10'
                         : 'text-gray-500 hover:text-yellow-400 hover:bg-yellow-400/10'
                     )}
-                    title={inWishlist ? 'In wishlist' : 'Add to wishlist'}
+                    title={inWishlist ? 'Remove from queue' : 'Add to queue'}
                   >
                     {addingToWishlist === athlete.id
                       ? <Loader2 className="w-4 h-4 animate-spin" />
