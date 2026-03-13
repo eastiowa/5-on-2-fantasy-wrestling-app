@@ -305,6 +305,7 @@ export function DraftRoom({
             <AvailableAthletes
               athletes={athletes}
               picks={picks}
+              teams={teams}
               userTeamId={userTeamId}
               isMyTurn={isMyTurn && settings.status === 'active'}
               picking={picking}
@@ -342,6 +343,7 @@ export function DraftRoom({
             <AthleteRosterGrid
               athletes={athletes}
               picks={picks}
+              teams={teams}
               userTeamId={userTeamId}
               isMyTurn={isMyTurn && settings.status === 'active'}
               picking={picking}

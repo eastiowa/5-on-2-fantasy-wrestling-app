@@ -4,14 +4,15 @@ import { useState } from 'react'
 import { Athlete, DraftPick, WEIGHT_CLASSES } from '@/types'
 import { validatePick } from '@/lib/draft-logic'
 import { cn } from '@/lib/utils'
-import { Search, BookmarkPlus, Zap, Loader2, Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, BookmarkPlus, Zap, Loader2, Check, ChevronDown, ChevronUp, ChevronRight } from 'lucide-react'
 import { FlagValue, FLAG_META, FLAG_ORDER } from '@/lib/athlete-flags'
 
 const ALL_SEEDS = Array.from({ length: 33 }, (_, i) => i + 1)
 
 interface AvailableAthletesProps {
   athletes: Athlete[]
-  picks: Array<DraftPick & { athlete: Athlete }>
+  picks: Array<DraftPick & { athlete: Athlete; team?: { name: string } | null }>
+  teams: Array<{ id: string; name: string }>
   userTeamId: string | null
   isMyTurn: boolean
   picking: boolean
@@ -26,6 +27,7 @@ interface AvailableAthletesProps {
 export function AvailableAthletes({
   athletes,
   picks,
+  teams,
   userTeamId,
   isMyTurn,
   picking,
@@ -41,6 +43,7 @@ export function AvailableAthletes({
   const [selectedSeeds, setSelectedSeeds] = useState<Set<number>>(new Set())
   const [seedPanelOpen, setSeedPanelOpen] = useState(false)
   const [addingToWishlist, setAddingToWishlist] = useState<string | null>(null)
+  const [draftedExpanded, setDraftedExpanded] = useState(false)
 
   function toggleSeed(seed: number) {
     setSelectedSeeds((prev) => {
@@ -50,11 +53,16 @@ export function AvailableAthletes({
       return next
     })
   }
-
   function clearSeeds() { setSelectedSeeds(new Set()) }
 
-  const available = athletes.filter((a) => {
-    if (a.is_drafted) return false
+  // Team name lookup (robust against missing join on realtime picks)
+  const teamById = new Map(teams.map((t) => [t.id, t.name]))
+
+  // Quick pick-by-athlete-id lookup
+  const pickByAthleteId = new Map(picks.map((p) => [p.athlete_id, p]))
+
+  // Filter helper (applies weight / seed / search)
+  function matchesFilters(a: Athlete) {
     if (filterWeight !== 'all' && a.weight !== filterWeight) return false
     if (selectedSeeds.size > 0 && !selectedSeeds.has(a.seed)) return false
     if (search) {
@@ -62,7 +70,13 @@ export function AvailableAthletes({
       return a.name.toLowerCase().includes(q) || a.school.toLowerCase().includes(q)
     }
     return true
-  })
+  }
+
+  // Undrafted athletes (apply all filters)
+  const available = athletes.filter((a) => !a.is_drafted && matchesFilters(a))
+
+  // Drafted athletes (visible at bottom, same filters)
+  const drafted = athletes.filter((a) => a.is_drafted && matchesFilters(a))
 
   async function handleWishlist(athleteId: string) {
     setAddingToWishlist(athleteId)
@@ -110,7 +124,7 @@ export function AvailableAthletes({
               : 'bg-gray-800 border-gray-700 text-white hover:border-gray-500'
           )}
         >
-          {selectedSeeds.size > 0 ? `Seeds: ${[...selectedSeeds].sort((a,b)=>a-b).join(', ')}` : 'Filter by seed'}
+          {selectedSeeds.size > 0 ? `Seeds: ${[...selectedSeeds].sort((a, b) => a - b).join(', ')}` : 'Filter by seed'}
           {seedPanelOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         </button>
       </div>
@@ -121,10 +135,7 @@ export function AvailableAthletes({
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium text-gray-300">Select seeds to show</span>
             {selectedSeeds.size > 0 && (
-              <button
-                onClick={clearSeeds}
-                className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors"
-              >
+              <button onClick={clearSeeds} className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors">
                 Clear all
               </button>
             )}
@@ -165,13 +176,13 @@ export function AvailableAthletes({
       </div>
 
       {/* Count */}
-      <div className="text-xs text-gray-500">{available.length} athletes available</div>
+      <div className="text-xs text-gray-500">{available.length} available · {drafted.length} drafted</div>
 
-      {/* Athletes list */}
+      {/* ── Available (undrafted) athletes ────────────────────────────────────── */}
       <div className="space-y-1.5">
         {available.length === 0 ? (
-          <div className="py-12 text-center text-gray-500 text-sm">
-            No athletes match your filter.
+          <div className="py-8 text-center text-gray-500 text-sm">
+            No available athletes match your filter.
           </div>
         ) : (
           available.map((athlete) => {
@@ -218,7 +229,7 @@ export function AvailableAthletes({
 
                 {/* Actions */}
                 <div className="flex items-center gap-2 shrink-0">
-                  {/* Flag buttons — S / O / P */}
+                  {/* Flag buttons */}
                   <div className="flex items-center gap-0.5">
                     {FLAG_ORDER.map((key) => {
                       const m = FLAG_META[key]
@@ -238,7 +249,7 @@ export function AvailableAthletes({
                     })}
                   </div>
 
-                  {/* Wishlist toggle — add or remove */}
+                  {/* Wishlist toggle */}
                   <button
                     onClick={() => inWishlist ? onRemoveFromWishlist(athlete.id) : handleWishlist(athlete.id)}
                     disabled={addingToWishlist === athlete.id || !userTeamId}
@@ -274,6 +285,68 @@ export function AvailableAthletes({
           })
         )}
       </div>
+
+      {/* ── Drafted athletes (collapsible section) ────────────────────────────── */}
+      {drafted.length > 0 && (
+        <div className="mt-2 border border-gray-800 rounded-lg overflow-hidden">
+          <button
+            onClick={() => setDraftedExpanded((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-900 hover:bg-gray-800/80 transition-colors text-sm text-gray-400"
+          >
+            <span className="font-medium">Already Drafted — {drafted.length} athlete{drafted.length !== 1 ? 's' : ''}</span>
+            <ChevronRight className={cn('w-4 h-4 transition-transform', draftedExpanded && 'rotate-90')} />
+          </button>
+
+          {draftedExpanded && (
+            <div className="divide-y divide-gray-800/60">
+              {drafted.map((athlete) => {
+                const pick = pickByAthleteId.get(athlete.id)
+                const draftedByName = pick
+                  ? (teamById.get(pick.team_id) ?? pick.team?.name ?? 'a team')
+                  : 'a team'
+                const isMyAthlete = pick?.team_id === userTeamId
+
+                return (
+                  <div
+                    key={athlete.id}
+                    className={cn(
+                      'flex items-center gap-3 px-4 py-2.5',
+                      isMyAthlete ? 'bg-yellow-950/20' : 'bg-gray-900/40'
+                    )}
+                  >
+                    {/* Weight badge */}
+                    <span className="text-xs font-bold bg-gray-800/60 text-gray-600 px-2 py-0.5 rounded-full shrink-0">
+                      {athlete.weight}
+                    </span>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 opacity-60">
+                      <div className="flex items-center gap-2">
+                        <span className={cn('font-medium truncate line-through text-sm', isMyAthlete ? 'text-yellow-600' : 'text-gray-500')}>
+                          {athlete.name}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-600 truncate">
+                        {athlete.school} · Seed #{athlete.seed}
+                      </div>
+                    </div>
+
+                    {/* Drafted by badge */}
+                    <span className={cn(
+                      'text-xs px-2 py-0.5 rounded-full font-medium shrink-0',
+                      isMyAthlete
+                        ? 'bg-yellow-400/10 text-yellow-600 border border-yellow-800/40'
+                        : 'bg-gray-800 text-gray-500 border border-gray-700'
+                    )}>
+                      {isMyAthlete ? '★ Your pick' : `Drafted · ${draftedByName}`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
