@@ -118,7 +118,19 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'Season not found' }, { status: 404 })
   }
 
-  // Upsert into team_seasons
+  // Phase 1: Null out all draft_positions for this season to avoid the
+  // (season_id, draft_position) unique constraint firing during the swap.
+  // e.g. team A: 1→2 and team B: 2→1 would collide if applied row-by-row.
+  const teamIds = order.map(({ id }) => id)
+  const { error: clearError } = await supabase
+    .from('team_seasons')
+    .update({ draft_position: null })
+    .eq('season_id', resolvedSeasonId!)
+    .in('team_id', teamIds)
+
+  if (clearError) return NextResponse.json({ error: clearError.message }, { status: 500 })
+
+  // Phase 2: Upsert the new positions now that the slate is clear.
   const upserts = order.map(({ id, draft_position }) => ({
     team_id: id,
     season_id: resolvedSeasonId,
