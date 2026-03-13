@@ -253,7 +253,7 @@ export default function SeasonsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Year</label>
               <input
-                type="number" min={2020} max={2099} value={newYear}
+                type="number" min={2010} max={2099} value={newYear}
                 onChange={e => setNewYear(Number(e.target.value))}
                 className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-400"
                 required
@@ -352,7 +352,7 @@ export default function SeasonsPage() {
                           placeholder="Season label"
                         />
                         <input
-                          type="number" value={editYear} min={2020} max={2099}
+                          type="number" value={editYear} min={2010} max={2099}
                           onChange={e => setEditYear(Number(e.target.value))}
                           className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-yellow-400 w-24"
                         />

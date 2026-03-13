@@ -43,8 +43,8 @@ export async function PATCH(
     if (!label?.trim()) {
       return NextResponse.json({ error: 'label is required' }, { status: 400 })
     }
-    if (year !== undefined && (typeof year !== 'number' || year < 2020)) {
-      return NextResponse.json({ error: 'year must be a number >= 2020' }, { status: 400 })
+    if (year !== undefined && (typeof year !== 'number' || year < 2010)) {
+      return NextResponse.json({ error: 'year must be a number >= 2010' }, { status: 400 })
     }
 
     const validStatuses = ['setup', 'drafting', 'active', 'complete']

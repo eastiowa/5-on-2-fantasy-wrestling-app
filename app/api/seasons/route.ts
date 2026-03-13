@@ -39,8 +39,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'year and label are required' }, { status: 400 })
   }
 
-  if (typeof year !== 'number' || year < 2020) {
-    return NextResponse.json({ error: 'year must be a number >= 2020' }, { status: 400 })
+  if (typeof year !== 'number' || year < 2010) {
+    return NextResponse.json({ error: 'year must be a number >= 2010' }, { status: 400 })
   }
 
   // If set_current, clear existing current flag first
