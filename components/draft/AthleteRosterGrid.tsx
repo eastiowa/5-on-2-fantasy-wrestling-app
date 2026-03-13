@@ -76,11 +76,11 @@ export function AthleteRosterGrid({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto rounded-lg bg-gray-900 border border-gray-800">
       <table className="text-xs border-collapse w-full min-w-[700px]">
         <thead>
-          <tr>
-            <th className="sticky left-0 bg-gray-950 z-10 px-3 py-2 text-left text-gray-400 font-semibold w-12">
+          <tr className="bg-gray-800">
+            <th className="sticky left-0 bg-gray-800 z-10 px-3 py-2 text-left text-gray-400 font-semibold w-12">
               Seed
             </th>
             {WEIGHT_CLASSES.map((w) => (
@@ -100,7 +100,7 @@ export function AthleteRosterGrid({
           {usedSeeds.map((seed) => (
             <tr key={seed} className="border-t border-gray-800/60">
               {/* Seed label */}
-              <td className="sticky left-0 bg-gray-950 z-10 px-3 py-1.5 text-gray-500 font-bold">
+              <td className="sticky left-0 bg-gray-900 z-10 px-3 py-1.5 text-gray-500 font-bold border-r border-gray-800">
                 #{seed}
               </td>
 
@@ -129,7 +129,13 @@ export function AthleteRosterGrid({
                 const isHovered = hoverCell === athlete.id
 
                 return (
-                  <td key={w} className="px-1 py-1">
+                  <td
+                    key={w}
+                    className={cn(
+                      'px-1 py-1 border border-gray-800/60 transition-colors',
+                      !isDrafted && flagMeta ? cn(flagMeta.rowBg, flagMeta.rowBorder) : 'bg-gray-900'
+                    )}
+                  >
                     <div
                       className="relative group"
                       onMouseEnter={() => !isDrafted && setHoverCell(athlete.id)}
