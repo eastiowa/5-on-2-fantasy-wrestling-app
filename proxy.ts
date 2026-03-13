@@ -30,10 +30,15 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
 
   // Public routes — allow unauthenticated
+  // IMPORTANT: /auth/* must be public so magic-link tokens in the URL hash
+  // are not stripped by a redirect before the client SDK can process them.
+  // Similarly /join/* (team-claim links) must be reachable without a session.
   const publicRoutes = ['/', '/login', '/invite']
   const isPublic =
     publicRoutes.includes(path) ||
+    path.startsWith('/auth/') ||   // password reset, email confirm, etc.
     path.startsWith('/invite/') ||
+    path.startsWith('/join/') ||   // team-claim invite links
     path.startsWith('/teams/') ||
     path.startsWith('/api/')
 
