@@ -48,6 +48,13 @@ export default async function CommissionerPage() {
         : `${seasonCount ?? 0} season${seasonCount !== 1 ? 's' : ''}`,
     },
     {
+      href: '/commissioner/seasons/results',
+      icon: Trophy,
+      label: 'Historical Results',
+      description: 'Import past-season final standings from team names + scores',
+      count: 'Upload history',
+    },
+    {
       href: '/commissioner/athletes',
       icon: Upload,
       label: 'Wrestlers',
