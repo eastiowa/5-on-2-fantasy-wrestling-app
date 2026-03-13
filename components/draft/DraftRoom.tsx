@@ -214,6 +214,18 @@ export function DraftRoom({
   const myPicks = picks.filter((p) => p.team_id === userTeamId)
   const remainingSecs = getRemainingSeconds(settings.pick_started_at, settings.pick_timer_seconds)
 
+  // Compute the next 3 teams on the clock (On the Clock / Up Next / In the Hole)
+  const next3 = orderedTeams.length === 10 && settings.status === 'active'
+    ? ([0, 1, 2] as const)
+        .map((offset) => {
+          const pickNum = settings.current_pick_number + offset
+          if (pickNum > 100) return null
+          const team = getTeamForPick(pickNum, orderedTeams as any)
+          return { team, pickNum }
+        })
+        .filter((x): x is { team: { id: string; name: string }; pickNum: number } => x !== null)
+    : []
+
   return (
     <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100vh-8rem)] flex flex-col gap-3 max-w-7xl mx-auto">
       {/* Status bar */}
@@ -241,6 +253,30 @@ export function DraftRoom({
               </div>
             </div>
           </>
+        )}
+
+        {/* On the Clock / Up Next / In the Hole cards */}
+        {next3.length > 0 && (
+          <div className="w-full grid grid-cols-3 gap-2 pt-1">
+            {next3.map(({ team, pickNum }, i) => {
+              const CARD_STYLES = [
+                { label: 'On the Clock', color: 'text-green-400',  border: 'border-green-800',  bg: 'bg-green-950/40'  },
+                { label: 'Up Next',      color: 'text-yellow-400', border: 'border-yellow-800', bg: 'bg-yellow-950/30' },
+                { label: 'In the Hole',  color: 'text-gray-400',   border: 'border-gray-700',   bg: 'bg-gray-800/40'   },
+              ] as const
+              const { label, color, border, bg } = CARD_STYLES[i]
+              const isMe = team.id === userTeamId
+              return (
+                <div key={pickNum} className={cn('flex flex-col gap-0.5 px-3 py-2 rounded-lg border', bg, border)}>
+                  <span className={cn('text-[9px] sm:text-[10px] font-bold uppercase tracking-widest', color)}>{label}</span>
+                  <span className={cn('font-semibold text-xs sm:text-sm leading-tight truncate', isMe ? 'text-yellow-300' : 'text-white')}>
+                    {isMe ? '⭐ You!' : team.name}
+                  </span>
+                  <span className="text-[9px] text-gray-500">Pick #{pickNum}</span>
+                </div>
+              )
+            })}
+          </div>
         )}
         {settings.status === 'paused' && (
           <div className="text-yellow-400 font-bold">⏸ Draft Paused</div>
