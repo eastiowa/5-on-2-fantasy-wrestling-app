@@ -110,6 +110,8 @@ export async function POST(req: NextRequest) {
       round,
       team_id: teamId,
       athlete_id,
+      // Always tag with the current season so dashboard season-filtered queries match
+      season_id: currentSeason?.id ?? null,
     })
 
   if (pickError) return NextResponse.json({ error: pickError.message }, { status: 500 })

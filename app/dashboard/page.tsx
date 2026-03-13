@@ -91,7 +91,11 @@ export default async function DashboardPage() {
     `)
     .order('pick_number')
 
-  if (currentSeason) allPicksQuery.eq('season_id', currentSeason.id)
+  // Include picks tagged with the current season OR picks with no season tag
+  // (legacy: earlier picks were inserted without season_id due to a bug now fixed)
+  if (currentSeason) {
+    allPicksQuery.or(`season_id.eq.${currentSeason.id},season_id.is.null`)
+  }
 
   const { data: allPicksRaw } = await allPicksQuery
 
