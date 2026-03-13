@@ -70,15 +70,24 @@ export function DraftRoom({
   const handleToggleFlag = useCallback(async (athleteId: string, flag: FlagValue) => {
     const current = flags.get(athleteId)
     if (current === flag) {
-      // Remove flag
-      await supabase.from('athlete_flags').delete().eq('athlete_id', athleteId)
+      // Remove flag — RLS filters by user_id automatically
+      await supabase.from('athlete_flags').delete()
+        .eq('athlete_id', athleteId)
+        .eq('user_id', userId)
       setFlags((prev) => { const m = new Map(prev); m.delete(athleteId); return m })
     } else {
-      // Upsert flag
-      await supabase.from('athlete_flags').upsert({ athlete_id: athleteId, flag }, { onConflict: 'user_id,athlete_id' })
-      setFlags((prev) => new Map(prev).set(athleteId, flag))
+      // Upsert flag — user_id MUST be in payload (NOT NULL column, no auto-default)
+      const { error } = await supabase.from('athlete_flags').upsert(
+        { user_id: userId, athlete_id: athleteId, flag },
+        { onConflict: 'user_id,athlete_id' }
+      )
+      if (!error) {
+        setFlags((prev) => new Map(prev).set(athleteId, flag))
+      } else {
+        console.error('[athlete_flags] upsert error:', error.message)
+      }
     }
-  }, [flags]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [flags, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const orderedTeams = [...teams].sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
   const currentPickInfo = orderedTeams.length === 10 && settings.status === 'active'
