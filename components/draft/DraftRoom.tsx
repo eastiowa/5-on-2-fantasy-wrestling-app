@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DraftSettings, Athlete, DraftPick, ChatMessage, WishlistItem, UserRole } from '@/types'
+import { FlagValue } from '@/lib/athlete-flags'
 import { getCurrentPickInfo, getTeamForPick, getRemainingSeconds } from '@/lib/draft-logic'
 import { PickTimerCountdown } from './PickTimerCountdown'
 import { AvailableAthletes } from './AvailableAthletes'
@@ -52,6 +53,32 @@ export function DraftRoom({
   const [activeTab, setActiveTab] = useState<TabKey>('athletes')
   const [picking, setPicking] = useState(false)
   const [pickError, setPickError] = useState<string | null>(null)
+
+  // ── Private athlete flags (STUD / OK / PUD) — stored per user via RLS ──────
+  const [flags, setFlags] = useState<Map<string, FlagValue>>(new Map())
+
+  useEffect(() => {
+    supabase.from('athlete_flags').select('athlete_id, flag').then(({ data }) => {
+      if (data) {
+        const m = new Map<string, FlagValue>()
+        data.forEach((r) => m.set(r.athlete_id, r.flag as FlagValue))
+        setFlags(m)
+      }
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleToggleFlag = useCallback(async (athleteId: string, flag: FlagValue) => {
+    const current = flags.get(athleteId)
+    if (current === flag) {
+      // Remove flag
+      await supabase.from('athlete_flags').delete().eq('athlete_id', athleteId)
+      setFlags((prev) => { const m = new Map(prev); m.delete(athleteId); return m })
+    } else {
+      // Upsert flag
+      await supabase.from('athlete_flags').upsert({ athlete_id: athleteId, flag }, { onConflict: 'user_id,athlete_id' })
+      setFlags((prev) => new Map(prev).set(athleteId, flag))
+    }
+  }, [flags]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const orderedTeams = [...teams].sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
   const currentPickInfo = orderedTeams.length === 10 && settings.status === 'active'
@@ -257,11 +284,12 @@ export function DraftRoom({
                 })
                 if (res.ok) {
                   const item = await res.json()
-                  // Optimistically add to wishlist state so the check icon appears immediately
                   setWishlist((prev) => prev.some((w) => w.athlete_id === athleteId) ? prev : [...prev, item])
                 }
               }}
               wishlistIds={new Set(wishlist.map((w) => w.athlete_id))}
+              flags={flags}
+              onToggleFlag={handleToggleFlag}
             />
           )}
           {activeTab === 'wishlist' && (
@@ -272,6 +300,8 @@ export function DraftRoom({
               picking={picking}
               onPick={handlePick}
               teamId={userTeamId}
+              flags={flags}
+              onToggleFlag={handleToggleFlag}
             />
           )}
           {activeTab === 'grid' && (
@@ -294,6 +324,8 @@ export function DraftRoom({
                   setWishlist((prev) => prev.some((w) => w.athlete_id === athleteId) ? prev : [...prev, item])
                 }
               }}
+              flags={flags}
+              onToggleFlag={handleToggleFlag}
             />
           )}
           {activeTab === 'board' && (

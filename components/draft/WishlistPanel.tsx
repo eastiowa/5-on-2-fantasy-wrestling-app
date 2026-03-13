@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { GripVertical, Trash2, Zap, Loader2, BookmarkPlus, Layers } from 'lucide-react'
+import { FlagValue, FLAG_META, FLAG_ORDER } from '@/lib/athlete-flags'
 
 type GroupBy = 'weight' | 'seed' | null
 
@@ -21,10 +22,12 @@ interface WishlistPanelProps {
   picking: boolean
   onPick: (athleteId: string) => void
   teamId: string | null
+  flags: Map<string, FlagValue>
+  onToggleFlag: (athleteId: string, flag: FlagValue) => void
 }
 
 function WishlistRow({
-  item, isMyTurn, picking, onPick, onRemove, draggable
+  item, isMyTurn, picking, onPick, onRemove, draggable, flags, onToggleFlag
 }: {
   item: WishlistItem & { athlete: Athlete }
   isMyTurn: boolean
@@ -32,6 +35,8 @@ function WishlistRow({
   onPick: (id: string) => void
   onRemove: (id: string) => void
   draggable: boolean
+  flags: Map<string, FlagValue>
+  onToggleFlag: (athleteId: string, flag: FlagValue) => void
 }) {
   const sortable = useSortable({ id: item.id, disabled: !draggable })
   const style = {
@@ -40,15 +45,19 @@ function WishlistRow({
     opacity: sortable.isDragging ? 0.5 : 1,
   }
   const drafted = item.athlete?.is_drafted
+  const flag = flags.get(item.athlete_id)
+  const flagMeta = flag ? FLAG_META[flag] : null
 
   return (
     <div
       ref={sortable.setNodeRef}
       style={style}
       className={cn(
-        'flex items-center gap-3 px-4 py-3 rounded-lg border',
+        'flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors',
         drafted
           ? 'bg-gray-900/30 border-gray-800 opacity-50'
+          : flagMeta
+          ? cn(flagMeta.rowBg, flagMeta.rowBorder)
           : 'bg-gray-900 border-gray-700'
       )}
     >
@@ -73,8 +82,15 @@ function WishlistRow({
       </span>
 
       <div className="flex-1 min-w-0">
-        <div className={cn('font-medium truncate', drafted ? 'line-through text-gray-500' : 'text-white')}>
-          {item.athlete?.name}
+        <div className="flex items-center gap-2">
+          <span className={cn('font-medium truncate', drafted ? 'line-through text-gray-500' : 'text-white')}>
+            {item.athlete?.name}
+          </span>
+          {flagMeta && !drafted && (
+            <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0', flagMeta.textColor, flagMeta.rowBorder, flagMeta.rowBg)}>
+              {flagMeta.label}
+            </span>
+          )}
         </div>
         <div className="text-xs text-gray-500 truncate">
           {item.athlete?.school} · Seed #{item.athlete?.seed}
@@ -83,6 +99,28 @@ function WishlistRow({
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {/* Flag buttons */}
+        {!drafted && (
+          <div className="flex items-center gap-0.5">
+            {FLAG_ORDER.map((key) => {
+              const m = FLAG_META[key]
+              return (
+                <button
+                  key={key}
+                  onClick={() => onToggleFlag(item.athlete_id, key)}
+                  title={`${flag === key ? 'Remove' : 'Mark as'} ${m.label}`}
+                  className={cn(
+                    'w-5 h-5 rounded text-[9px] font-bold transition-all border',
+                    flag === key ? m.activeBtn : m.inactiveBtn
+                  )}
+                >
+                  {m.abbr}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
         {isMyTurn && !drafted && (
           <button
             onClick={() => onPick(item.athlete_id)}
@@ -105,7 +143,7 @@ function WishlistRow({
 }
 
 export function WishlistPanel({
-  wishlist, setWishlist, isMyTurn, picking, onPick, teamId
+  wishlist, setWishlist, isMyTurn, picking, onPick, teamId, flags, onToggleFlag
 }: WishlistPanelProps) {
   const sensors = useSensors(useSensor(PointerSensor))
   const [groupBy, setGroupBy] = useState<GroupBy>(null)
@@ -161,7 +199,6 @@ export function WishlistPanel({
 
   const topAvailable = wishlist.find((i) => !i.athlete?.is_drafted)
 
-  // Build grouped buckets for display
   function getBuckets(): { label: string; items: Array<WishlistItem & { athlete: Athlete }> }[] {
     if (!groupBy) return []
 
@@ -173,17 +210,16 @@ export function WishlistPanel({
       }))
     }
 
-    // seed: seeds 1–9 are individual buckets, 10+ grouped together
     const ranges = [
-      { label: 'Seed 1',  min: 1,  max: 1  },
-      { label: 'Seed 2',  min: 2,  max: 2  },
-      { label: 'Seed 3',  min: 3,  max: 3  },
-      { label: 'Seed 4',  min: 4,  max: 4  },
-      { label: 'Seed 5',  min: 5,  max: 5  },
-      { label: 'Seed 6',  min: 6,  max: 6  },
-      { label: 'Seed 7',  min: 7,  max: 7  },
-      { label: 'Seed 8',  min: 8,  max: 8  },
-      { label: 'Seed 9',  min: 9,  max: 9  },
+      { label: 'Seed 1',    min: 1,  max: 1 },
+      { label: 'Seed 2',    min: 2,  max: 2 },
+      { label: 'Seed 3',    min: 3,  max: 3 },
+      { label: 'Seed 4',    min: 4,  max: 4 },
+      { label: 'Seed 5',    min: 5,  max: 5 },
+      { label: 'Seed 6',    min: 6,  max: 6 },
+      { label: 'Seed 7',    min: 7,  max: 7 },
+      { label: 'Seed 8',    min: 8,  max: 8 },
+      { label: 'Seed 9',    min: 9,  max: 9 },
       { label: 'Seeds 10+', min: 10, max: Infinity },
     ]
     return ranges
@@ -210,9 +246,7 @@ export function WishlistPanel({
           onClick={() => toggleGroup('weight')}
           className={cn(
             'px-2.5 py-1 text-xs rounded-md transition-colors',
-            groupBy === 'weight'
-              ? 'bg-yellow-400 text-gray-900 font-semibold'
-              : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+            groupBy === 'weight' ? 'bg-yellow-400 text-gray-900 font-semibold' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
           )}
         >
           Weight
@@ -221,9 +255,7 @@ export function WishlistPanel({
           onClick={() => toggleGroup('seed')}
           className={cn(
             'px-2.5 py-1 text-xs rounded-md transition-colors',
-            groupBy === 'seed'
-              ? 'bg-yellow-400 text-gray-900 font-semibold'
-              : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+            groupBy === 'seed' ? 'bg-yellow-400 text-gray-900 font-semibold' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
           )}
         >
           Seed
@@ -263,6 +295,8 @@ export function WishlistPanel({
                     onPick={onPick}
                     onRemove={handleRemove}
                     draggable={false}
+                    flags={flags}
+                    onToggleFlag={onToggleFlag}
                   />
                 ))}
               </div>
@@ -270,7 +304,6 @@ export function WishlistPanel({
           ))}
         </div>
       ) : (
-        /* Normal DnD view */
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={wishlist.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             <div className="space-y-1.5">
@@ -283,6 +316,8 @@ export function WishlistPanel({
                   onPick={onPick}
                   onRemove={handleRemove}
                   draggable={true}
+                  flags={flags}
+                  onToggleFlag={onToggleFlag}
                 />
               ))}
             </div>

@@ -1,19 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { Athlete, DraftPick, WEIGHT_CLASSES } from '@/types'
 import { validatePick } from '@/lib/draft-logic'
 import { cn } from '@/lib/utils'
 import { Search, BookmarkPlus, Zap, Loader2, Check, ChevronDown, ChevronUp } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-
-type FlagValue = 'stud' | 'ok' | 'pud'
-
-const FLAG_META: Record<FlagValue, { label: string; abbr: string; color: string; border: string; bg: string }> = {
-  stud: { label: 'STUD', abbr: 'S', color: 'text-green-400',  border: 'border-green-600',  bg: 'bg-green-950/30' },
-  ok:   { label: 'OK',   abbr: 'O', color: 'text-yellow-400', border: 'border-yellow-600', bg: 'bg-yellow-950/20' },
-  pud:  { label: 'PUD',  abbr: 'P', color: 'text-red-400',    border: 'border-red-700',    bg: 'bg-red-950/20'   },
-}
+import { FlagValue, FLAG_META, FLAG_ORDER } from '@/lib/athlete-flags'
 
 const ALL_SEEDS = Array.from({ length: 33 }, (_, i) => i + 1)
 
@@ -26,6 +18,8 @@ interface AvailableAthletesProps {
   onPick: (athleteId: string) => void
   onAddToWishlist: (athleteId: string) => Promise<void>
   wishlistIds: Set<string>
+  flags: Map<string, FlagValue>
+  onToggleFlag: (athleteId: string, flag: FlagValue) => void
 }
 
 export function AvailableAthletes({
@@ -37,6 +31,8 @@ export function AvailableAthletes({
   onPick,
   onAddToWishlist,
   wishlistIds,
+  flags,
+  onToggleFlag,
 }: AvailableAthletesProps) {
   const [search, setSearch] = useState('')
   const [filterWeight, setFilterWeight] = useState<number | 'all'>('all')
@@ -44,48 +40,6 @@ export function AvailableAthletes({
   const [seedPanelOpen, setSeedPanelOpen] = useState(false)
   const [addingToWishlist, setAddingToWishlist] = useState<string | null>(null)
 
-  // ── Athlete flags (private per user) ─────────────────────────────────────
-  const [flags, setFlags] = useState<Map<string, FlagValue>>(new Map())
-  const [togglingFlag, setTogglingFlag] = useState<string | null>(null)
-
-  const supabase = createClient()
-
-  // Load flags from Supabase on mount (RLS ensures only own rows are returned)
-  const loadFlags = useCallback(async () => {
-    const { data } = await supabase
-      .from('athlete_flags')
-      .select('athlete_id, flag')
-    if (data) {
-      const map = new Map<string, FlagValue>()
-      data.forEach((row) => map.set(row.athlete_id, row.flag as FlagValue))
-      setFlags(map)
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { loadFlags() }, [loadFlags])
-
-  // Toggle a flag: same flag → remove; different flag → change; no flag → set
-  async function handleFlag(athleteId: string, flag: FlagValue) {
-    setTogglingFlag(athleteId)
-    const current = flags.get(athleteId)
-
-    if (current === flag) {
-      // Remove flag
-      await supabase.from('athlete_flags').delete().eq('athlete_id', athleteId)
-      setFlags((prev) => { const next = new Map(prev); next.delete(athleteId); return next })
-    } else {
-      // Upsert flag
-      await supabase.from('athlete_flags').upsert(
-        { athlete_id: athleteId, flag },
-        { onConflict: 'user_id,athlete_id' }
-      )
-      setFlags((prev) => new Map(prev).set(athleteId, flag))
-    }
-
-    setTogglingFlag(null)
-  }
-
-  // ── Filters ───────────────────────────────────────────────────────────────
   function toggleSeed(seed: number) {
     setSelectedSeeds((prev) => {
       const next = new Set(prev)
@@ -182,9 +136,7 @@ export function AvailableAthletes({
                   onClick={() => toggleSeed(seed)}
                   className={cn(
                     'w-7 h-7 sm:w-8 sm:h-8 rounded text-[10px] sm:text-xs font-semibold transition-colors',
-                    checked
-                      ? 'bg-yellow-400 text-gray-900'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    checked ? 'bg-yellow-400 text-gray-900' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   )}
                 >
                   {seed}
@@ -196,16 +148,17 @@ export function AvailableAthletes({
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-3 text-[10px] text-gray-600">
+      <div className="flex items-center gap-3 text-[10px] text-gray-600 flex-wrap">
         <span className="font-medium text-gray-500">My flags:</span>
-        {(Object.entries(FLAG_META) as [FlagValue, typeof FLAG_META.stud][]).map(([key, meta]) => (
-          <span key={key} className={cn('flex items-center gap-1 font-semibold', meta.color)}>
-            <span className={cn('w-4 h-4 rounded-sm flex items-center justify-center text-[9px]', meta.bg, 'border', meta.border)}>
-              {meta.abbr}
+        {FLAG_ORDER.map((key) => {
+          const m = FLAG_META[key]
+          return (
+            <span key={key} className={cn('flex items-center gap-1 font-semibold', m.textColor)}>
+              <span className={cn('w-3.5 h-3.5 rounded-sm', m.dotColor)} />
+              {m.label}
             </span>
-            {meta.label}
-          </span>
-        ))}
+          )
+        })}
         <span className="text-gray-700 italic">— visible only to you</span>
       </div>
 
@@ -225,7 +178,6 @@ export function AvailableAthletes({
             const inWishlist = wishlistIds.has(athlete.id)
             const flag = flags.get(athlete.id)
             const flagMeta = flag ? FLAG_META[flag] : null
-            const flagging = togglingFlag === athlete.id
 
             return (
               <div
@@ -235,7 +187,7 @@ export function AvailableAthletes({
                   ineligible
                     ? 'bg-gray-900/50 border-gray-800 opacity-60'
                     : flagMeta
-                    ? cn(flagMeta.bg, flagMeta.border)
+                    ? cn(flagMeta.rowBg, flagMeta.rowBorder)
                     : isMyTurn
                     ? 'bg-gray-900 border-gray-700 hover:border-yellow-400/50'
                     : 'bg-gray-900 border-gray-800'
@@ -251,7 +203,7 @@ export function AvailableAthletes({
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-white truncate">{athlete.name}</span>
                     {flagMeta && (
-                      <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0', flagMeta.color, flagMeta.border, flagMeta.bg)}>
+                      <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0', flagMeta.textColor, flagMeta.rowBorder, flagMeta.rowBg)}>
                         {flagMeta.label}
                       </span>
                     )}
@@ -266,22 +218,22 @@ export function AvailableAthletes({
                 <div className="flex items-center gap-2 shrink-0">
                   {/* Flag buttons — S / O / P */}
                   <div className="flex items-center gap-0.5">
-                    {(Object.entries(FLAG_META) as [FlagValue, typeof FLAG_META.stud][]).map(([key, meta]) => (
-                      <button
-                        key={key}
-                        onClick={() => handleFlag(athlete.id, key)}
-                        disabled={flagging}
-                        title={`${flag === key ? 'Remove' : 'Mark as'} ${meta.label}`}
-                        className={cn(
-                          'w-6 h-6 rounded text-[10px] font-bold transition-colors border',
-                          flag === key
-                            ? cn(meta.bg, meta.border, meta.color)
-                            : 'bg-gray-800 border-gray-700 text-gray-600 hover:border-gray-500 hover:text-gray-400'
-                        )}
-                      >
-                        {flagging ? '…' : meta.abbr}
-                      </button>
-                    ))}
+                    {FLAG_ORDER.map((key) => {
+                      const m = FLAG_META[key]
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => onToggleFlag(athlete.id, key)}
+                          title={`${flag === key ? 'Remove' : 'Mark as'} ${m.label}`}
+                          className={cn(
+                            'w-6 h-6 rounded text-[10px] font-bold transition-all border',
+                            flag === key ? m.activeBtn : m.inactiveBtn
+                          )}
+                        >
+                          {m.abbr}
+                        </button>
+                      )
+                    })}
                   </div>
 
                   {/* Add to wishlist */}

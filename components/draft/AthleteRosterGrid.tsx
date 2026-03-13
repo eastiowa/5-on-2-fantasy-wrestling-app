@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Athlete, DraftPick, WEIGHT_CLASSES } from '@/types'
 import { cn } from '@/lib/utils'
 import { BookmarkPlus, Check, Loader2 } from 'lucide-react'
+import { FlagValue, FLAG_META, FLAG_ORDER } from '@/lib/athlete-flags'
 
 interface AthleteRosterGridProps {
   athletes: Athlete[]
@@ -14,6 +15,8 @@ interface AthleteRosterGridProps {
   onPick: (athleteId: string) => void
   wishlistIds: Set<string>
   onAddToWishlist: (athleteId: string) => Promise<void>
+  flags: Map<string, FlagValue>
+  onToggleFlag: (athleteId: string, flag: FlagValue) => void
 }
 
 /**
@@ -23,6 +26,7 @@ interface AthleteRosterGridProps {
  * • Drafted athletes are greyed out with a strikethrough
  * • Athletes your team already has at that weight class are dimmed
  * • Clicking an undrafted cell picks the athlete (when it's your turn)
+ * • Flag color (green/yellow/red) shown as a small dot on each cell
  */
 export function AthleteRosterGrid({
   athletes,
@@ -33,8 +37,11 @@ export function AthleteRosterGrid({
   onPick,
   wishlistIds,
   onAddToWishlist,
+  flags,
+  onToggleFlag,
 }: AthleteRosterGridProps) {
   const [addingWishlist, setAddingWishlist] = useState<string | null>(null)
+  const [hoverCell, setHoverCell] = useState<string | null>(null)
 
   async function handleWishlist(e: React.MouseEvent, athleteId: string) {
     e.stopPropagation()
@@ -42,6 +49,7 @@ export function AthleteRosterGrid({
     await onAddToWishlist(athleteId)
     setAddingWishlist(null)
   }
+
   // Build lookup: athleteMap[weight][seed] = Athlete
   const athleteMap = new Map<number, Map<number, Athlete>>()
   for (const a of athletes) {
@@ -49,12 +57,10 @@ export function AthleteRosterGrid({
     athleteMap.get(a.weight)!.set(a.seed, a)
   }
 
-  // Determine which seeds actually have athletes (avoid empty rows)
   const usedSeeds = Array.from(
     new Set(athletes.map((a) => a.seed))
   ).sort((a, b) => a - b)
 
-  // Teams that have already drafted at each weight
   const draftedWeights = new Set(
     picks.filter((p) => p.team_id === userTeamId).map((p) => p.athlete?.weight)
   )
@@ -72,7 +78,6 @@ export function AthleteRosterGrid({
       <table className="text-xs border-collapse w-full min-w-[700px]">
         <thead>
           <tr>
-            {/* Seed column header */}
             <th className="sticky left-0 bg-gray-950 z-10 px-3 py-2 text-left text-gray-400 font-semibold w-12">
               Seed
             </th>
@@ -81,9 +86,7 @@ export function AthleteRosterGrid({
                 key={w}
                 className={cn(
                   'px-2 py-2 text-center font-semibold whitespace-nowrap',
-                  draftedWeights.has(w)
-                    ? 'text-gray-600'   // already have someone at this weight
-                    : 'text-yellow-400'
+                  draftedWeights.has(w) ? 'text-gray-600' : 'text-yellow-400'
                 )}
               >
                 {w}
@@ -103,9 +106,7 @@ export function AthleteRosterGrid({
                 const athlete = athleteMap.get(w)?.get(seed)
                 if (!athlete) {
                   return (
-                    <td key={w} className="px-2 py-1.5 text-center text-gray-800">
-                      —
-                    </td>
+                    <td key={w} className="px-2 py-1.5 text-center text-gray-800">—</td>
                   )
                 }
 
@@ -121,9 +122,17 @@ export function AthleteRosterGrid({
                 const inWishlist = wishlistIds.has(athlete.id)
                 const isAddingWishlist = addingWishlist === athlete.id
 
+                const flag = flags.get(athlete.id)
+                const flagMeta = flag ? FLAG_META[flag] : null
+                const isHovered = hoverCell === athlete.id
+
                 return (
                   <td key={w} className="px-1 py-1">
-                    <div className="relative group">
+                    <div
+                      className="relative group"
+                      onMouseEnter={() => !isDrafted && setHoverCell(athlete.id)}
+                      onMouseLeave={() => setHoverCell(null)}
+                    >
                       <button
                         onClick={() => canPick && onPick(athlete.id)}
                         disabled={!canPick}
@@ -140,12 +149,17 @@ export function AthleteRosterGrid({
                               : 'line-through text-gray-700 cursor-default'
                             : myWeightTaken
                             ? 'text-gray-600 cursor-default'
+                            : flagMeta && !canPick
+                            ? cn('cursor-default border', flagMeta.rowBg, flagMeta.rowBorder, 'text-gray-200')
                             : canPick
                             ? 'text-white bg-green-950/60 hover:bg-green-900/80 cursor-pointer ring-1 ring-green-700'
                             : 'text-gray-300 hover:bg-gray-800 cursor-default'
                         )}
                       >
-                        {/* Last name only for compactness */}
+                        {/* Flag dot indicator */}
+                        {flagMeta && !isDrafted && (
+                          <span className={cn('inline-block w-1.5 h-1.5 rounded-full mb-0.5 mr-0.5', flagMeta.dotColor)} />
+                        )}
                         <span className="block truncate max-w-[72px]">
                           {athlete.name.split(' ').pop()}
                         </span>
@@ -154,7 +168,29 @@ export function AthleteRosterGrid({
                         </span>
                       </button>
 
-                      {/* Wishlist bookmark — only for undrafted athletes when user has a team */}
+                      {/* Flag buttons — show on hover for undrafted athletes */}
+                      {!isDrafted && isHovered && (
+                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex gap-0.5 z-20 bg-gray-950 border border-gray-700 rounded p-0.5 shadow-lg">
+                          {FLAG_ORDER.map((key) => {
+                            const m = FLAG_META[key]
+                            return (
+                              <button
+                                key={key}
+                                onClick={(e) => { e.stopPropagation(); onToggleFlag(athlete.id, key) }}
+                                title={`${flag === key ? 'Remove' : 'Mark as'} ${m.label}`}
+                                className={cn(
+                                  'w-5 h-5 rounded text-[9px] font-bold transition-all border',
+                                  flag === key ? m.activeBtn : m.inactiveBtn
+                                )}
+                              >
+                                {m.abbr}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Wishlist bookmark */}
                       {!isDrafted && userTeamId && (
                         <button
                           onClick={(e) => !inWishlist && handleWishlist(e, athlete.id)}
@@ -184,8 +220,7 @@ export function AthleteRosterGrid({
       </table>
 
       <p className="mt-3 text-[10px] text-gray-600">
-        Columns = weight class · Rows = seed · Strikethrough = already drafted ·
-        Green = pickable now
+        Columns = weight class · Rows = seed · Strikethrough = drafted · Green = pickable · Hover a cell to flag
       </p>
     </div>
   )
