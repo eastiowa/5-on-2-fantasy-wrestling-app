@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   UserCog, Shield, User, Loader2, CheckCircle, AlertCircle,
   Crown, Zap, Users, Trash2, Mail, Pencil, X, Check, MailCheck,
-  UserPlus, Link2, Copy,
+  UserPlus, Link2, Copy, Phone, BellOff, Bell,
 } from 'lucide-react'
 
 interface UserProfile {
@@ -13,6 +13,8 @@ interface UserProfile {
   display_name: string | null
   role: 'commissioner' | 'team_manager'
   team_id: string | null
+  phone: string | null
+  sms_opt_in: boolean
   team?: { name: string } | null
 }
 
@@ -197,7 +199,10 @@ export default function UsersPage() {
     load()
   }
 
-  async function handleUpdate(userId: string, payload: { display_name?: string; email?: string }) {
+  async function handleUpdate(
+    userId: string,
+    payload: { display_name?: string; email?: string; phone?: string; sms_opt_in?: boolean }
+  ) {
     setBusy(userId)
     const res = await fetch(`/api/users/${userId}`, {
       method: 'PATCH',
@@ -546,21 +551,24 @@ function UserRow({
   canEdit: boolean
   onRoleChange: (id: string, role: 'commissioner' | 'team_manager') => void
   onTeamAssign: (id: string, teamId: string | null) => void
-  onUpdate: (id: string, payload: { display_name?: string; email?: string }) => Promise<boolean>
+  onUpdate: (id: string, payload: { display_name?: string; email?: string; phone?: string; sms_opt_in?: boolean }) => Promise<boolean>
   onDelete: (user: UserProfile) => void
   onResendActivation: (user: UserProfile) => void
   onResetPassword: (user: UserProfile) => void
 }) {
   const [editingName, setEditingName] = useState(false)
   const [editingEmail, setEditingEmail] = useState(false)
+  const [editingPhone, setEditingPhone] = useState(false)
   const [nameVal, setNameVal] = useState(user.display_name ?? '')
   const [emailVal, setEmailVal] = useState(user.email)
+  const [phoneVal, setPhoneVal] = useState(user.phone ?? '')
 
   // Keep local state in sync if parent reloads
   useEffect(() => { setNameVal(user.display_name ?? '') }, [user.display_name])
   useEffect(() => { setEmailVal(user.email) }, [user.email])
+  useEffect(() => { setPhoneVal(user.phone ?? '') }, [user.phone])
 
-  const busy = busyId === user.id || busyId === `resend-${user.id}` || busyId === `reset-${user.id}`
+  const busy = busyId === user.id || busyId === `resend-${user.id}` || busyId === `reset-${user.id}` || busyId === `sms-${user.id}`
   const isResendBusy = busyId === `resend-${user.id}`
   const isResetBusy = busyId === `reset-${user.id}`
   const isCommissioner = user.role === 'commissioner'
@@ -575,6 +583,15 @@ function UserRow({
   async function saveEmail() {
     const ok = await onUpdate(user.id, { email: emailVal })
     if (ok) setEditingEmail(false)
+  }
+
+  async function savePhone() {
+    const ok = await onUpdate(user.id, { phone: phoneVal.trim() || undefined })
+    if (ok) setEditingPhone(false)
+  }
+
+  async function toggleSmsOptIn() {
+    await onUpdate(user.id, { sms_opt_in: !user.sms_opt_in })
   }
 
   return (
@@ -659,6 +676,43 @@ function UserRow({
                 <button
                   onClick={() => setEditingEmail(true)}
                   title="Edit email"
+                  className="p-1 text-gray-600 hover:text-gray-300 transition-colors"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Phone row */}
+          {editingPhone && canEdit ? (
+            <div className="flex items-center gap-2">
+              <input
+                autoFocus
+                type="tel"
+                value={phoneVal}
+                onChange={(e) => setPhoneVal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') savePhone(); if (e.key === 'Escape') setEditingPhone(false) }}
+                placeholder="+12125551234"
+                className="px-2 py-1 bg-gray-800 border border-yellow-400/50 rounded-lg text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400 w-44"
+              />
+              <button onClick={savePhone} disabled={busy} className="p-1 text-green-400 hover:text-green-300 disabled:opacity-40">
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+              </button>
+              <button onClick={() => { setEditingPhone(false); setPhoneVal(user.phone ?? '') }} className="p-1 text-gray-500 hover:text-gray-300">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Phone className="w-3 h-3 text-gray-600 shrink-0" />
+              <span className="text-xs text-gray-500">
+                {user.phone ?? <span className="italic text-gray-700">No phone set</span>}
+              </span>
+              {canEdit && (
+                <button
+                  onClick={() => setEditingPhone(true)}
+                  title="Edit phone number"
                   className="p-1 text-gray-600 hover:text-gray-300 transition-colors"
                 >
                   <Pencil className="w-3 h-3" />
@@ -763,6 +817,22 @@ function UserRow({
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <Mail className="w-3.5 h-3.5" />}
             Send Password Reset
+          </button>
+
+          {/* SMS opt-in toggle */}
+          <button
+            onClick={toggleSmsOptIn}
+            disabled={!!busyId || !user.phone}
+            title={!user.phone ? 'Set a phone number first' : user.sms_opt_in ? 'Disable draft SMS alerts' : 'Enable draft SMS alerts'}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40 border ${
+              user.sms_opt_in
+                ? 'bg-green-950 border-green-800 text-green-400 hover:bg-red-950 hover:border-red-800 hover:text-red-400'
+                : 'bg-gray-800 border-gray-700 text-gray-500 hover:bg-green-950/40 hover:border-green-700/50 hover:text-green-300'
+            }`}
+          >
+            {user.sms_opt_in
+              ? <><Bell className="w-3.5 h-3.5" /> SMS On</>
+              : <><BellOff className="w-3.5 h-3.5" /> SMS Off</>}
           </button>
 
           {/* Delete user */}

@@ -1,9 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getTeamForPick, getPickMeta, validatePick } from '@/lib/draft-logic'
 import { Team, Athlete, DraftPick } from '@/types'
+import { sendSms } from '@/lib/twilio'
+import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -128,6 +130,40 @@ export async function POST(req: Request) {
     is_system: true,
     message: `Pick #${currentPick} (${round === 1 ? 'R1' : `R${round}`}): ${activeTeam.name} selected ${athlete.name} (${athlete.weight} lbs, Seed #${athlete.seed}, ${athlete.school})${isDraftComplete ? ' — DRAFT COMPLETE!' : `\nOn the clock: ${nextTeam?.name}`}`,
   })
+
+  // ── SMS notification to the next team's manager (fire-and-forget) ─────────
+  if (!isDraftComplete && nextTeam) {
+    // Non-blocking — don't await, don't let SMS failure break the pick response
+    ;(async () => {
+      try {
+        const admin = createAdminClient()
+        const { data: mgr } = await admin
+          .from('teams')
+          .select('manager_id')
+          .eq('id', nextTeam.id)
+          .single()
+
+        if (mgr?.manager_id) {
+          const { data: profile } = await admin
+            .from('profiles')
+            .select('display_name, phone, sms_opt_in')
+            .eq('id', mgr.manager_id)
+            .single()
+
+          if (profile?.phone && profile.sms_opt_in) {
+            const name = profile.display_name ?? 'Manager'
+            const msg =
+              `🤼 ${name}, you're on the clock! ` +
+              `${nextTeam.name}'s pick #${nextPick} in the 5 on 2 Fantasy Wrestling Draft. ` +
+              `https://5on2fantasywrestling.com/draft`
+            await sendSms(profile.phone, msg)
+          }
+        }
+      } catch (smsErr) {
+        console.error('[draft/pick] SMS notify error:', smsErr)
+      }
+    })()
+  }
 
   return NextResponse.json({
     success: true,

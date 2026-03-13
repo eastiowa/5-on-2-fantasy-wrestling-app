@@ -18,7 +18,7 @@ export async function GET() {
   // (profiles.team_id → teams  vs  teams.manager_id → profiles)
   const { data: users, error } = await supabase
     .from('profiles')
-    .select('id, email, display_name, role, team_id, team:teams!profiles_team_id_fkey(name)')
+    .select('id, email, display_name, role, team_id, phone, sms_opt_in, team:teams!profiles_team_id_fkey(name)')
     .order('role', { ascending: true })   // commissioners first
     .order('email', { ascending: true })
 

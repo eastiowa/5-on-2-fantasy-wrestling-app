@@ -87,16 +87,18 @@ export async function PATCH(
 
   // ── Parse body once ─────────────────────────────────────────────────────────
   const body = await req.json().catch(() => ({}))
-  const { role, team_id, display_name, email } = body
+  const { role, team_id, display_name, email, phone, sms_opt_in } = body
 
   const hasRole = role !== undefined
   const hasTeamId = team_id !== undefined
   const hasDisplayName = display_name !== undefined
   const hasEmail = email !== undefined
+  const hasPhone = phone !== undefined
+  const hasSmsOptIn = sms_opt_in !== undefined
 
-  if (!hasRole && !hasTeamId && !hasDisplayName && !hasEmail) {
+  if (!hasRole && !hasTeamId && !hasDisplayName && !hasEmail && !hasPhone && !hasSmsOptIn) {
     return NextResponse.json(
-      { error: 'Provide at least one of: role, team_id, display_name, email' },
+      { error: 'Provide at least one of: role, team_id, display_name, email, phone, sms_opt_in' },
       { status: 400 }
     )
   }
@@ -164,6 +166,8 @@ export async function PATCH(
   if (hasTeamId) profileUpdate.team_id = team_id ?? null
   if (hasDisplayName) profileUpdate.display_name = display_name?.trim() || null
   if (hasEmail && email?.trim()) profileUpdate.email = email.trim()
+  if (hasPhone) profileUpdate.phone = phone?.trim() || null
+  if (hasSmsOptIn) profileUpdate.sms_opt_in = !!sms_opt_in
 
   const { data, error } = await admin
     .from('profiles')
