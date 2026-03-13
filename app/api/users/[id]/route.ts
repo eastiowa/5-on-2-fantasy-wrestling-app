@@ -121,21 +121,31 @@ export async function PATCH(
 
   // ── Authorization ───────────────────────────────────────────────────────────
   if (!isCommissioner) {
-    if (!isBootstrap) {
-      return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
-    }
-    // Bootstrap: only self-promotion to commissioner is allowed
-    if (targetId !== user.id) {
-      return NextResponse.json(
-        { error: 'In bootstrap mode you can only promote yourself' },
-        { status: 403 }
-      )
-    }
-    if (role !== 'commissioner') {
-      return NextResponse.json(
-        { error: 'Bootstrap mode only allows promoting to commissioner' },
-        { status: 400 }
-      )
+    // Allow any authenticated user to update their OWN display_name only.
+    // All other fields (role, team_id, email, phone, sms_opt_in) remain
+    // commissioner-only (or bootstrap-mode only for role).
+    const isSelfDisplayNameOnly =
+      targetId === user.id &&
+      hasDisplayName &&
+      !hasRole && !hasTeamId && !hasEmail && !hasPhone && !hasSmsOptIn
+
+    if (!isSelfDisplayNameOnly) {
+      if (!isBootstrap) {
+        return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
+      }
+      // Bootstrap: only self-promotion to commissioner is allowed
+      if (targetId !== user.id) {
+        return NextResponse.json(
+          { error: 'In bootstrap mode you can only promote yourself' },
+          { status: 403 }
+        )
+      }
+      if (role !== 'commissioner') {
+        return NextResponse.json(
+          { error: 'Bootstrap mode only allows promoting to commissioner' },
+          { status: 400 }
+        )
+      }
     }
   }
 

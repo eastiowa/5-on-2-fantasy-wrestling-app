@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { TeamNameEditor } from '@/components/shared/TeamNameEditor'
+import { DisplayNameEditor } from '@/components/shared/DisplayNameEditor'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -176,8 +177,9 @@ export default async function DashboardPage() {
 
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
+        <div className="space-y-1">
           <TeamNameEditor teamId={team.id} initialName={team.name} />
+          <DisplayNameEditor userId={user.id} initialName={profile.display_name} />
         </div>
         {draftSettings?.status === 'active' && (
           <Link
