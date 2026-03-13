@@ -194,7 +194,84 @@ app/
 │   ├── draft-logic.ts      # Snake draft engine
 │   ├── scoring.ts          # NCAA point calculations
 │   ├── google-sheets.ts    # Sheets API integration
+│   ├── trackwrestling.ts   # TrackWrestling live scraper
 │   └── utils.ts            # Helpers
 ├── types/index.ts          # TypeScript types
 └── supabase/migrations/    # SQL schema
 ```
+
+---
+
+## TrackWrestling Live Scoring
+
+Scores can be scraped automatically from TrackWrestling during tournament weekends. The system polls the TrackWrestling REST API, computes per-athlete championship wins, consolation wins, bonus points, and placement, then upserts the `scores` table — triggering Supabase Realtime to push updates to all connected browsers instantly.
+
+### Setup (one-time)
+
+#### 1. Run the migration
+
+In your Supabase SQL Editor run **`supabase/migrations/011_scrape_settings.sql`**. This creates the `scrape_settings` table that stores the tournament URL, auto-sync toggle, and last-sync status.
+
+#### 2. Add the `CRON_SECRET` environment variable
+
+Generate a random secret:
+```bash
+openssl rand -hex 32
+```
+
+Add it to:
+- **`.env.local`** → `CRON_SECRET=<your-secret>`
+- **Vercel** → Settings → Environment Variables → `CRON_SECRET`
+
+#### 3. Configure the tournament URL
+
+In the app: **Commissioner → Score Management → TrackWrestling Live Sync**
+
+Paste the tournament bracket URL from TrackWrestling, e.g.:
+```
+https://www.trackwrestling.com/tw/public/tournaments/TournamentBrackets.jsp?TIM=912847832
+```
+
+Click **Save URL**, then **Sync Now** to test it. If scores load, you're good.
+
+#### 4. Set up automated polling with cron-job.org (free)
+
+1. Create a free account at [cron-job.org](https://cron-job.org)
+2. Create a new cron job:
+   - **URL**: `https://yourapp.vercel.app/api/scores/scrape-trackwrestling`
+   - **Method**: `POST`
+   - **Schedule**: Every 2 minutes (or every minute during live rounds)
+   - **Request headers**: add `x-cron-secret` → `<your CRON_SECRET value>`
+3. Enable the job only during tournament weekends to avoid unnecessary requests
+
+> **Vercel Hobby plan note**: Vercel's built-in cron jobs only support a daily minimum on the free tier. cron-job.org is a free alternative that works identically — it simply POSTs to your Vercel-hosted API route on whatever schedule you set.
+
+### How it works
+
+```
+cron-job.org (every 2 min)
+       │
+       ▼  POST /api/scores/scrape-trackwrestling
+       │  Header: x-cron-secret: <CRON_SECRET>
+       │
+       ▼  lib/trackwrestling.ts
+          → Extract TIM from saved tournament URL
+          → GET /tw/rest/g/public/tournament/{TIM}         (weight class list)
+          → GET /tw/rest/g/public/tournament/{TIM}/bracket/{wcId}  (per weight class)
+          → Parse bouts: championship wins, consolation wins, bonus pts, placement
+          │
+          ▼  Supabase scores table (upsert)
+          │
+          ▼  Supabase Realtime broadcast → all browser clients update live
+```
+
+### Scoring computed from TrackWrestling
+
+| Source | DB column | Points formula |
+|--------|-----------|----------------|
+| Championship bracket wins | `championship_wins` | × 1.0 pt each |
+| Consolation bracket wins | `consolation_wins` | × 0.5 pts each |
+| Win type (fall, TF, MD…) | `bonus_points` | Per `BONUS_POINTS` map |
+| Final placement (1–8) | `placement_points` | Per `PLACEMENT_POINTS` map |
+
+`total_points` is a Supabase **generated column** — it recalculates automatically.
