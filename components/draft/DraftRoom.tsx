@@ -54,40 +54,52 @@ export function DraftRoom({
   const [picking, setPicking] = useState(false)
   const [pickError, setPickError] = useState<string | null>(null)
 
-  // ── Private athlete flags (STUD / OK / PUD) — stored per user via RLS ──────
+  // ── Private athlete flags (STUD / OK / PUD) — persisted via /api/draft/flags ─
   const [flags, setFlags] = useState<Map<string, FlagValue>>(new Map())
 
   useEffect(() => {
-    supabase.from('athlete_flags').select('athlete_id, flag').then(({ data }) => {
-      if (data) {
-        const m = new Map<string, FlagValue>()
-        data.forEach((r) => m.set(r.athlete_id, r.flag as FlagValue))
-        setFlags(m)
-      }
-    })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    fetch('/api/draft/flags')
+      .then((r) => r.json())
+      .then((data: { athlete_id: string; flag: FlagValue }[]) => {
+        if (Array.isArray(data)) {
+          const m = new Map<string, FlagValue>()
+          data.forEach((r) => m.set(r.athlete_id, r.flag))
+          setFlags(m)
+        }
+      })
+      .catch((err) => console.error('[flags load]', err))
+  }, [])
 
   const handleToggleFlag = useCallback(async (athleteId: string, flag: FlagValue) => {
     const current = flags.get(athleteId)
-    if (current === flag) {
-      // Remove flag — RLS filters by user_id automatically
-      await supabase.from('athlete_flags').delete()
-        .eq('athlete_id', athleteId)
-        .eq('user_id', userId)
-      setFlags((prev) => { const m = new Map(prev); m.delete(athleteId); return m })
-    } else {
-      // Upsert flag — user_id MUST be in payload (NOT NULL column, no auto-default)
-      const { error } = await supabase.from('athlete_flags').upsert(
-        { user_id: userId, athlete_id: athleteId, flag },
-        { onConflict: 'user_id,athlete_id' }
-      )
-      if (!error) {
-        setFlags((prev) => new Map(prev).set(athleteId, flag))
-      } else {
-        console.error('[athlete_flags] upsert error:', error.message)
-      }
+    const removing = current === flag
+
+    // Optimistic update
+    setFlags((prev) => {
+      const m = new Map(prev)
+      if (removing) m.delete(athleteId)
+      else m.set(athleteId, flag)
+      return m
+    })
+
+    const res = await fetch('/api/draft/flags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ athlete_id: athleteId, flag: removing ? null : flag }),
+    })
+
+    if (!res.ok) {
+      // Roll back optimistic update on failure
+      const err = await res.json().catch(() => ({}))
+      console.error('[draft/flags] save error:', err.error)
+      setFlags((prev) => {
+        const m = new Map(prev)
+        if (removing && current) m.set(athleteId, current)
+        else m.delete(athleteId)
+        return m
+      })
     }
-  }, [flags, userId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [flags]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const orderedTeams = [...teams].sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
   const currentPickInfo = orderedTeams.length === 10 && settings.status === 'active'
