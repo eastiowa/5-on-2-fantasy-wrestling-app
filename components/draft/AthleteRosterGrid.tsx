@@ -43,7 +43,6 @@ export function AthleteRosterGrid({
   onRemoveFromWishlist,
 }: AthleteRosterGridProps) {
   const [addingWishlist, setAddingWishlist] = useState<string | null>(null)
-  const [hoverCell, setHoverCell] = useState<string | null>(null)
 
   async function handleWishlist(e: React.MouseEvent, athleteId: string) {
     e.stopPropagation()
@@ -126,7 +125,6 @@ export function AthleteRosterGrid({
 
                 const flag = flags.get(athlete.id)
                 const flagMeta = flag ? FLAG_META[flag] : null
-                const isHovered = hoverCell === athlete.id
 
                 return (
                   <td
@@ -136,11 +134,7 @@ export function AthleteRosterGrid({
                       !isDrafted && flagMeta ? cn(flagMeta.rowBg, flagMeta.rowBorder) : 'bg-gray-900'
                     )}
                   >
-                    <div
-                      className="relative group"
-                      onMouseEnter={() => !isDrafted && setHoverCell(athlete.id)}
-                      onMouseLeave={() => setHoverCell(null)}
-                    >
+                    <div className="relative group">
                       <button
                         onClick={() => canPick && onPick(athlete.id)}
                         disabled={!canPick}
@@ -176,9 +170,9 @@ export function AthleteRosterGrid({
                         </span>
                       </button>
 
-                      {/* Flag buttons — show on hover for undrafted athletes */}
-                      {!isDrafted && isHovered && (
-                        <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex gap-0.5 z-20 bg-gray-950 border border-gray-700 rounded p-0.5 shadow-lg">
+                      {/* Flag buttons — CSS group-hover, below the cell so no gap */}
+                      {!isDrafted && (
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-px z-30 hidden group-hover:flex gap-0.5 bg-gray-950 border border-gray-700 rounded p-0.5 shadow-xl">
                           {FLAG_ORDER.map((key) => {
                             const m = FLAG_META[key]
                             return (
