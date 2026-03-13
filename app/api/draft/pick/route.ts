@@ -97,7 +97,13 @@ export async function POST(req: NextRequest) {
   const { round } = getPickMeta(currentPick)
 
   // Insert the pick in a transaction
-  const { error: pickError } = await supabase
+  // Use the admin client for all privileged writes so team_managers can
+  // trigger them. The regular session client is blocked by RLS for:
+  //   • athletes UPDATE  (commissioner-only policy)
+  //   • draft_settings UPDATE  (commissioner-only policy)
+  const admin = createAdminClient()
+
+  const { error: pickError } = await admin
     .from('draft_picks')
     .insert({
       pick_number: currentPick,
@@ -108,23 +114,31 @@ export async function POST(req: NextRequest) {
 
   if (pickError) return NextResponse.json({ error: pickError.message }, { status: 500 })
 
-  // Mark athlete as drafted
-  await supabase.from('athletes').update({ is_drafted: true }).eq('id', athlete_id)
+  // Mark athlete as drafted (commissioner-only UPDATE policy → must use admin)
+  const { error: athleteErr } = await admin
+    .from('athletes')
+    .update({ is_drafted: true })
+    .eq('id', athlete_id)
+  if (athleteErr) console.error('[draft/pick] athlete update error:', athleteErr.message)
 
   // Check if draft is complete (100 picks total)
   const nextPick = currentPick + 1
   const isDraftComplete = nextPick > 100
 
-  // Update draft settings: advance pick counter (or mark complete)
-  await supabase.from('draft_settings').update({
-    current_pick_number: isDraftComplete ? currentPick : nextPick,
-    status: isDraftComplete ? 'complete' : 'active',
-    pick_started_at: isDraftComplete ? null : new Date().toISOString(),
-  }).eq('id', draftSettings.id)
+  // Advance pick counter / mark complete (commissioner-only UPDATE → must use admin)
+  const { error: settingsErr } = await admin
+    .from('draft_settings')
+    .update({
+      current_pick_number: isDraftComplete ? currentPick : nextPick,
+      status: isDraftComplete ? 'complete' : 'active',
+      pick_started_at: isDraftComplete ? null : new Date().toISOString(),
+    })
+    .eq('id', draftSettings.id)
+  if (settingsErr) console.error('[draft/pick] draft_settings update error:', settingsErr.message)
 
   // Post a system chat message
   const nextTeam = isDraftComplete ? null : getTeamForPick(nextPick, teams as Team[])
-  await supabase.from('draft_chat_messages').insert({
+  await admin.from('draft_chat_messages').insert({
     sender_name: 'Draft Bot',
     sender_role: 'system',
     is_system: true,
@@ -136,7 +150,6 @@ export async function POST(req: NextRequest) {
     // Non-blocking — don't await, don't let SMS failure break the pick response
     ;(async () => {
       try {
-        const admin = createAdminClient()
         const { data: mgr } = await admin
           .from('teams')
           .select('manager_id')
