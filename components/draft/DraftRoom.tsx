@@ -215,16 +215,15 @@ export function DraftRoom({
   const remainingSecs = getRemainingSeconds(settings.pick_started_at, settings.pick_timer_seconds)
 
   // Compute the next 3 teams on the clock (On the Clock / Up Next / In the Hole)
-  const next3 = orderedTeams.length === 10 && settings.status === 'active'
-    ? ([0, 1, 2] as const)
-        .map((offset) => {
-          const pickNum = settings.current_pick_number + offset
-          if (pickNum > 100) return null
-          const team = getTeamForPick(pickNum, orderedTeams as any)
-          return { team, pickNum }
-        })
-        .filter((x): x is { team: { id: string; name: string }; pickNum: number } => x !== null)
-    : []
+  const next3: Array<{ team: { id: string; name: string }; pickNum: number }> = []
+  if (orderedTeams.length === 10 && settings.status === 'active') {
+    for (let offset = 0; offset < 3; offset++) {
+      const pickNum = settings.current_pick_number + offset
+      if (pickNum > 100) break
+      const team = getTeamForPick(pickNum, orderedTeams as any)
+      next3.push({ team: { id: team.id, name: team.name }, pickNum })
+    }
+  }
 
   return (
     <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100vh-8rem)] flex flex-col gap-3 max-w-7xl mx-auto">
