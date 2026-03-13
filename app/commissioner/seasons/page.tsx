@@ -3,10 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   CalendarDays, Plus, CheckCircle, AlertCircle, Loader2,
-  ChevronRight, Star, Trash2, Trophy, Clock, Pencil, ListOrdered, ChevronDown
+  ChevronRight, Star, Trash2, Trophy, Clock, Pencil
 } from 'lucide-react'
 import type { Season, TeamSeason } from '@/types'
-import { DraftOrderEditor } from '@/components/commissioner/DraftOrderEditor'
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,7 +35,7 @@ function nextStatus(s: Season['status']): Season['status'] | null {
 export default function SeasonsPage() {
   const [seasons, setSeasons] = useState<Season[]>([])
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<string | null>(null)   // id of row being mutated
+  const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   // inline edit
@@ -44,9 +43,6 @@ export default function SeasonsPage() {
   const [editLabel, setEditLabel] = useState('')
   const [editYear, setEditYear] = useState<number>(new Date().getFullYear())
   const [editStatus, setEditStatus] = useState<Season['status']>('setup')
-
-  // draft order panel
-  const [draftOrderOpenId, setDraftOrderOpenId] = useState<string | null>(null)
 
   // history panel
   const [historySeasonId, setHistorySeasonId] = useState<string | null>(null)
@@ -59,13 +55,10 @@ export default function SeasonsPage() {
   const [setCurrent, setSetCurrent] = useState(true)
   const [creating, setCreating] = useState(false)
 
-  // Auto-derive label from year (e.g. 2025 → "2024-25 Season")
-  // User can still override it
   const defaultLabel = (y: number) => `${y - 1}-${String(y).slice(-2)} Season`
   const [newLabel, setNewLabel] = useState(() => defaultLabel(new Date().getFullYear()))
-
-  // Keep label in sync when year changes, unless the user has manually edited it
   const [labelEdited, setLabelEdited] = useState(false)
+
   useEffect(() => {
     if (!labelEdited) setNewLabel(defaultLabel(newYear))
   }, [newYear, labelEdited])
@@ -130,8 +123,6 @@ export default function SeasonsPage() {
   }
 
   // ── update info (label / year / status) ───────────────────────────────────
-  // Sends all three fields in one request — status is always included so there
-  // is no stale-closure comparison that could silently skip a status change.
   async function handleUpdateInfo(id: string) {
     setBusy(id)
     const res = await fetch(`/api/seasons/${id}`, {
@@ -262,10 +253,7 @@ export default function SeasonsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">Year</label>
               <input
-                type="number"
-                min={2020}
-                max={2099}
-                value={newYear}
+                type="number" min={2020} max={2099} value={newYear}
                 onChange={e => setNewYear(Number(e.target.value))}
                 className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-400"
                 required
@@ -285,8 +273,7 @@ export default function SeasonsPage() {
                 )}
               </label>
               <input
-                type="text"
-                value={newLabel}
+                type="text" value={newLabel}
                 onChange={e => { setNewLabel(e.target.value); setLabelEdited(true) }}
                 className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-yellow-400"
                 required
@@ -310,16 +297,14 @@ export default function SeasonsPage() {
 
           <div className="flex gap-3 pt-2">
             <button
-              type="submit"
-              disabled={creating}
+              type="submit" disabled={creating}
               className="flex items-center gap-2 px-5 py-2 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg transition-colors text-sm"
             >
               {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               Create Season
             </button>
             <button
-              type="button"
-              onClick={() => setShowCreate(false)}
+              type="button" onClick={() => setShowCreate(false)}
               className="px-5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors text-sm"
             >
               Cancel
@@ -356,22 +341,18 @@ export default function SeasonsPage() {
                     )}
                   </div>
 
-                  {/* Info — click pencil to edit inline */}
+                  {/* Info */}
                   <div className="flex-1 min-w-0">
                     {editId === season.id ? (
                       <div className="flex items-center gap-2 flex-wrap">
                         <input
-                          type="text"
-                          value={editLabel}
+                          type="text" value={editLabel}
                           onChange={e => setEditLabel(e.target.value)}
                           className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-yellow-400 w-48"
                           placeholder="Season label"
                         />
                         <input
-                          type="number"
-                          value={editYear}
-                          min={2020}
-                          max={2099}
+                          type="number" value={editYear} min={2020} max={2099}
                           onChange={e => setEditYear(Number(e.target.value))}
                           className="bg-gray-800 border border-gray-700 text-white rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-yellow-400 w-24"
                         />
@@ -385,8 +366,7 @@ export default function SeasonsPage() {
                           ))}
                         </select>
                         <button
-                          onClick={() => handleUpdateInfo(season.id)}
-                          disabled={isBusy}
+                          onClick={() => handleUpdateInfo(season.id)} disabled={isBusy}
                           className="px-3 py-1 bg-yellow-400 hover:bg-yellow-300 text-gray-900 font-semibold rounded-lg text-xs transition-colors disabled:opacity-50"
                         >
                           {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
@@ -428,8 +408,7 @@ export default function SeasonsPage() {
                     {/* Set current */}
                     {!season.is_current && (
                       <button
-                        onClick={() => handleSetCurrent(season.id)}
-                        disabled={isBusy}
+                        onClick={() => handleSetCurrent(season.id)} disabled={isBusy}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-400/10 hover:bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
                       >
                         {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Star className="w-3 h-3" />}
@@ -440,28 +419,13 @@ export default function SeasonsPage() {
                     {/* Advance status */}
                     {next && (
                       <button
-                        onClick={() => handleAdvance(season.id, next)}
-                        disabled={isBusy}
+                        onClick={() => handleAdvance(season.id, next)} disabled={isBusy}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
                       >
                         {isBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ChevronRight className="w-3 h-3" />}
                         → {STATUS_LABELS[next]}
                       </button>
                     )}
-
-                    {/* Draft order toggle — available on all non-complete seasons + complete (read-only) */}
-                    <button
-                      onClick={() => setDraftOrderOpenId(draftOrderOpenId === season.id ? null : season.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg text-xs font-medium transition-colors ${
-                        draftOrderOpenId === season.id
-                          ? 'bg-orange-950 text-orange-300 border-orange-800'
-                          : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border-gray-700'
-                      }`}
-                    >
-                      <ListOrdered className="w-3 h-3" />
-                      Draft Order
-                      <ChevronDown className={`w-3 h-3 transition-transform ${draftOrderOpenId === season.id ? 'rotate-180' : ''}`} />
-                    </button>
 
                     {/* View history (completed seasons) */}
                     {season.status === 'complete' && (
@@ -477,8 +441,7 @@ export default function SeasonsPage() {
                     {/* Delete — any non-current season */}
                     {!season.is_current && (
                       <button
-                        onClick={() => handleDelete(season.id, season.label)}
-                        disabled={isBusy}
+                        onClick={() => handleDelete(season.id, season.label)} disabled={isBusy}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-red-950/40 hover:bg-red-950 text-red-400 border border-red-900/50 rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
                         title="Delete this season"
                       >
@@ -488,24 +451,6 @@ export default function SeasonsPage() {
                     )}
                   </div>
                 </div>
-
-                {/* Draft order panel */}
-                {draftOrderOpenId === season.id && (
-                  <div className="border-t border-orange-600/20 bg-gray-950 px-5 py-4">
-                    <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
-                      <ListOrdered className="w-4 h-4 text-yellow-400" />
-                      Draft Order — {season.label}
-                      {season.status === 'complete' && (
-                        <span className="ml-2 text-xs font-normal text-gray-500">(read-only — season complete)</span>
-                      )}
-                    </h3>
-                    <DraftOrderEditor
-                      seasonId={season.id}
-                      seasonLabel={season.label}
-                      readOnly={season.status === 'complete'}
-                    />
-                  </div>
-                )}
 
                 {/* Historical standings panel */}
                 {isHistoryOpen && (

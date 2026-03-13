@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Users, Upload, ClipboardList, Settings, Megaphone, BarChart3, Shield, Trophy, CalendarDays, UserCog, Link2 } from 'lucide-react'
+import { Users, Upload, ClipboardList, Megaphone, BarChart3, Shield, Trophy, CalendarDays, UserCog, Link2 } from 'lucide-react'
 
 export default async function CommissionerPage() {
   const supabase = await createClient()
@@ -65,7 +65,7 @@ export default async function CommissionerPage() {
       href: '/commissioner/draft',
       icon: ClipboardList,
       label: 'Draft Controls',
-      description: 'Set draft order, start/pause/override the draft',
+      description: 'Draft order, start/pause/override, timer & rules',
       count: draftSettings
         ? `${draftSettings.status.charAt(0).toUpperCase() + draftSettings.status.slice(1)} — Pick #${draftSettings.current_pick_number}`
         : 'Not started',
@@ -83,13 +83,6 @@ export default async function CommissionerPage() {
       label: 'Announcements',
       description: 'Post league-wide announcements to the home page',
       count: `${announcementCount ?? 0} posted`,
-    },
-    {
-      href: '/commissioner/settings',
-      icon: Settings,
-      label: 'Draft Settings',
-      description: 'Pick timer, auto-skip, snake draft rules',
-      count: 'Configure',
     },
     {
       href: '/commissioner/users',
