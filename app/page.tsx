@@ -11,9 +11,12 @@ async function getStandings() {
   const supabase = await createClient()
 
   // Get all teams with their managers
+  // Must use explicit FK hint (manager_id) because there are two FKs between teams
+  // and profiles (teams.manager_id → profiles and profiles.team_id → teams), which
+  // causes PostgREST to return null when the join is ambiguous.
   const { data: teams } = await supabase
     .from('teams')
-    .select('*, manager:profiles(display_name, email)')
+    .select('*, manager:profiles!manager_id(display_name, email)')
     .order('name')
 
   // Get all draft picks with athlete scores

@@ -16,7 +16,7 @@ export default async function TeamPage({ params }: PageProps) {
   // Fetch team
   const { data: team } = await supabase
     .from('teams')
-    .select('*, manager:profiles(display_name, email)')
+    .select('*, manager:profiles!manager_id(display_name, email)')
     .eq('id', id)
     .single()
 
