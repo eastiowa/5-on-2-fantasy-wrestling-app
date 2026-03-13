@@ -17,14 +17,37 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false)
   const [sessionReady, setSessionReady] = useState(false)
 
-  // Supabase embeds the access_token in the URL hash (#access_token=...&type=recovery).
-  // The client SDK picks it up automatically via onAuthStateChange.
+  // Supabase sends: /auth/reset-password#access_token=...&type=recovery
+  // The browser client SDK detects the hash and fires PASSWORD_RECOVERY.
+  // There is a race condition: the SDK may fire the event before this
+  // useEffect subscribes (especially on fast connections). We handle it three ways:
+  //   1. Subscribe to onAuthStateChange for PASSWORD_RECOVERY (normal path)
+  //   2. Also accept SIGNED_IN when the URL hash contains type=recovery (race fallback)
+  //   3. Call getSession() after subscribing in case the event already fired
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const isRecoveryUrl =
+      typeof window !== 'undefined' &&
+      (window.location.hash.includes('type=recovery') ||
+        window.location.search.includes('type=recovery'))
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setSessionReady(true)
       }
+      // Fallback: SIGNED_IN fires after PASSWORD_RECOVERY on some SDK versions
+      if (event === 'SIGNED_IN' && session && isRecoveryUrl) {
+        setSessionReady(true)
+      }
     })
+
+    // Fallback for the race condition: if the SDK already processed the hash
+    // by the time this effect runs, the event is gone — check the active session.
+    if (isRecoveryUrl) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) setSessionReady(true)
+      })
+    }
+
     return () => subscription.unsubscribe()
   }, [supabase])
 
