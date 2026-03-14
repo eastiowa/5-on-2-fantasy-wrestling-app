@@ -273,15 +273,19 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
                       <td className="px-4 py-3 text-gray-400">{p.athlete?.weight} lbs</td>
                       <td className="px-4 py-3 text-gray-400">#{p.athlete?.seed}</td>
                       <td className="px-4 py-3">
-                        <button
-                          onClick={() => removePick(p.id, p.pick_number, subsequentCount)}
-                          disabled={isRemoving || removingPickId !== null}
-                          title={subsequentCount > 0 ? `Remove this pick and ${subsequentCount} pick(s) after it` : 'Remove this pick'}
-                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-950 hover:bg-red-900 border border-red-800 text-red-400 rounded transition-colors disabled:opacity-40"
-                        >
-                          {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                          {subsequentCount > 0 ? `Remove (+${subsequentCount})` : 'Remove'}
-                        </button>
+                        {['active', 'paused'].includes(settings.status) ? (
+                          <button
+                            onClick={() => removePick(p.id, p.pick_number, subsequentCount)}
+                            disabled={isRemoving || removingPickId !== null}
+                            title={subsequentCount > 0 ? `Remove this pick and ${subsequentCount} pick(s) after it` : 'Remove this pick'}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-red-950 hover:bg-red-900 border border-red-800 text-red-400 rounded transition-colors disabled:opacity-40"
+                          >
+                            {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            {subsequentCount > 0 ? `Remove (+${subsequentCount})` : 'Remove'}
+                          </button>
+                        ) : (
+                          <span className="text-gray-700 text-xs">—</span>
+                        )}
                       </td>
                     </tr>
                   )

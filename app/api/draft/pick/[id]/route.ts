@@ -24,6 +24,19 @@ export async function DELETE(
 
   const admin = createAdminClient()
 
+  // Only allow removal while draft is active or paused
+  const { data: draftSettings } = await admin
+    .from('draft_settings')
+    .select('status')
+    .single()
+
+  if (!draftSettings || !['active', 'paused'].includes(draftSettings.status)) {
+    return NextResponse.json(
+      { error: 'Picks can only be removed while the draft is active or paused.' },
+      { status: 400 }
+    )
+  }
+
   // Fetch the pick being removed
   const { data: pick, error: pickFetchErr } = await admin
     .from('draft_picks')

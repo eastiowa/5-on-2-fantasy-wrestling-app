@@ -540,7 +540,7 @@ export function DraftRoom({
               userTeamId={userTeamId}
               onlineTeamIds={onlineTeamIds}
               isCommissioner={userRole === 'commissioner'}
-              onRemovePick={userRole === 'commissioner' ? handleRemovePick : undefined}
+              onRemovePick={userRole === 'commissioner' && ['active', 'paused'].includes(settings.status) ? handleRemovePick : undefined}
             />
           )}
           {activeTab === 'chat' && (
