@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   BarChart3, Upload, Link2, AlertCircle, CheckCircle,
-  Loader2, Download, Zap, ToggleLeft, ToggleRight, RefreshCw, Clock, Trophy,
+  Loader2, Download, Zap, ToggleLeft, ToggleRight, RefreshCw, Clock,
 } from 'lucide-react'
 import { generateScoreCSVTemplate } from '@/lib/scoring'
 import { createClient } from '@/lib/supabase/client'
@@ -17,12 +17,6 @@ interface ScrapeSettings {
   last_scraped_at: string | null
   last_scrape_status: 'idle' | 'ok' | 'error'
   last_scrape_message: string | null
-  // FlowWrestling rankings
-  flowrestling_url: string | null
-  flo_auto_scrape_enabled: boolean
-  flo_last_scraped_at: string | null
-  flo_last_scrape_status: 'idle' | 'ok' | 'error'
-  flo_last_scrape_message: string | null
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -46,12 +40,6 @@ export default function ScoresPage() {
   const [togglingAuto, setTogglingAuto] = useState(false)
   const [scraping, setScraping] = useState(false)
 
-  // FlowWrestling rankings state
-  const [floUrl, setFloUrl] = useState('')
-  const [savingFloUrl, setSavingFloUrl] = useState(false)
-  const [togglingFloAuto, setTogglingFloAuto] = useState(false)
-  const [scrapingFlo, setScrapingFlo] = useState(false)
-
   // Shared result / error
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
@@ -62,7 +50,6 @@ export default function ScoresPage() {
     if (data) {
       setScrapeSettings(data as ScrapeSettings)
       setTwUrl(data.trackwrestling_url ?? '')
-      setFloUrl(data.flowrestling_url ?? '')
     }
   }, [supabase])
 
@@ -187,85 +174,20 @@ export default function ScoresPage() {
     await loadScrapeSettings()
   }
 
-  // ── FlowWrestling: save URL ────────────────────────────────────────────────
-  async function handleSaveFloUrl() {
-    if (!floUrl.trim()) return
-    setSavingFloUrl(true)
-    setError(null)
-    const { error: err } = await supabase
-      .from('scrape_settings')
-      .update({
-        flowrestling_url: floUrl.trim(),
-        updated_at: new Date().toISOString(),
-      })
-      .neq('id', '00000000-0000-0000-0000-000000000000')
-    setSavingFloUrl(false)
-    if (err) setError(`Failed to save FlowWrestling URL: ${err.message}`)
-    else await loadScrapeSettings()
-  }
-
-  // ── FlowWrestling: toggle auto-sync ────────────────────────────────────────
-  async function handleToggleFloAuto() {
-    if (!scrapeSettings) return
-    setTogglingFloAuto(true)
-    const newVal = !scrapeSettings.flo_auto_scrape_enabled
-    const { error: err } = await supabase
-      .from('scrape_settings')
-      .update({ flo_auto_scrape_enabled: newVal, updated_at: new Date().toISOString() })
-      .neq('id', '00000000-0000-0000-0000-000000000000')
-    setTogglingFloAuto(false)
-    if (err) setError(`Failed to toggle FlowWrestling auto-sync: ${err.message}`)
-  }
-
-  // ── FlowWrestling: manual scrape ───────────────────────────────────────────
-  async function handleFloScrapeNow() {
-    setScrapingFlo(true)
-    setError(null)
-    setResult(null)
-    const body: Record<string, string> = {}
-    if (floUrl.trim() && floUrl.trim() !== scrapeSettings?.flowrestling_url) {
-      body.rankings_url = floUrl.trim()
-    }
-    const res = await fetch('/api/athletes/scrape-flo-rankings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json()
-    setScrapingFlo(false)
-    if (!res.ok) setError(data.error ?? 'FlowWrestling scrape failed')
-    else setResult({ ...data, source: 'flo' })
-    await loadScrapeSettings()
-  }
-
   // ── Shared result banner ───────────────────────────────────────────────────
   const ResultBanner = result ? (
     <div className="p-4 bg-green-950 border border-green-800 rounded-lg text-green-400 space-y-1">
       <div className="flex items-center gap-2 font-medium">
         <CheckCircle className="w-4 h-4" />
-        {result.source === 'flo' ? 'FlowWrestling rankings updated' : 'Score update complete'}
+        Score update complete
       </div>
-      {result.source === 'flo' ? (
-        <>
-          <div className="text-sm">✓ Updated {result.updated} athletes from {result.pages_processed} pages ({result.rankings_found} rankings found)</div>
-          {result.not_found?.length > 0 && (
-            <div className="text-sm text-yellow-400">⚠️ Unmatched: {result.not_found.join(', ')}</div>
-          )}
-          {result.ambiguous?.length > 0 && (
-            <div className="text-sm text-yellow-400">⚠️ Ambiguous: {result.ambiguous.join(' | ')}</div>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="text-sm">✓ Updated {result.updated} athletes
-            {result.weight_classes_processed != null && ` across ${result.weight_classes_processed} weight classes`}
-          </div>
-          {result.not_found?.length > 0 && (
-            <div className="text-sm text-yellow-400">
-              ⚠️ Not matched: {result.not_found.join(', ')}
-            </div>
-          )}
-        </>
+      <div className="text-sm">✓ Updated {result.updated} athletes
+        {result.weight_classes_processed != null && ` across ${result.weight_classes_processed} weight classes`}
+      </div>
+      {result.not_found?.length > 0 && (
+        <div className="text-sm text-yellow-400">
+          ⚠️ Not matched: {result.not_found.join(', ')}
+        </div>
       )}
       {(result.warnings?.length > 0 || result.parse_warnings?.length > 0) && (
         <div className="text-xs text-gray-400 mt-1">
@@ -282,7 +204,7 @@ export default function ScoresPage() {
     </div>
   ) : null
 
-  // ── Status badge for last TW scrape ───────────────────────────────────────
+  // ── Status badge for last scrape ───────────────────────────────────────────
   function ScrapeStatusBadge() {
     if (!scrapeSettings?.last_scraped_at) {
       return <span className="text-xs text-gray-500">Never synced</span>
@@ -300,30 +222,6 @@ export default function ScoresPage() {
         {scrapeSettings.last_scrape_message && (
           <div className="text-xs text-gray-500 truncate max-w-xs">
             {scrapeSettings.last_scrape_message}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  // ── Status badge for last Flo scrape ───────────────────────────────────────
-  function FloScrapeStatusBadge() {
-    if (!scrapeSettings?.flo_last_scraped_at) {
-      return <span className="text-xs text-gray-500">Never synced</span>
-    }
-    const ago = formatDistanceToNow(new Date(scrapeSettings.flo_last_scraped_at), { addSuffix: true })
-    const isOk = scrapeSettings.flo_last_scrape_status === 'ok'
-    return (
-      <div className="flex flex-col gap-0.5">
-        <div className={`flex items-center gap-1.5 text-xs font-medium ${isOk ? 'text-green-400' : 'text-red-400'}`}>
-          {isOk
-            ? <CheckCircle className="w-3.5 h-3.5" />
-            : <AlertCircle className="w-3.5 h-3.5" />}
-          {isOk ? 'Synced' : 'Error'} · {ago}
-        </div>
-        {scrapeSettings.flo_last_scrape_message && (
-          <div className="text-xs text-gray-500 truncate max-w-xs">
-            {scrapeSettings.flo_last_scrape_message}
           </div>
         )}
       </div>
@@ -429,100 +327,6 @@ export default function ScoresPage() {
             /api/scores/scrape-trackwrestling
           </code>
           <p>Add a request header: <code className="text-gray-300">x-cron-secret</code> → your <code className="text-gray-300">CRON_SECRET</code> env value. Set schedule to every 2 minutes during tournament weekends.</p>
-        </div>
-      </div>
-
-      {/* ── FlowWrestling Rankings Sync ─────────────────────────────────────── */}
-      <div className="bg-gray-900 rounded-xl border border-yellow-400/30 p-6 space-y-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="font-semibold text-white flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-yellow-400" />
-              FlowWrestling Rankings Sync
-              <span className="text-xs bg-blue-400/10 text-blue-400 border border-blue-400/20 rounded px-1.5 py-0.5 font-normal">
-                RANKINGS
-              </span>
-            </h3>
-            <p className="text-sm text-gray-400 mt-1">
-              Paste the FlowWrestling rankings collection URL to automatically populate
-              each wrestler&apos;s <strong className="text-gray-300">Flo Ranking</strong> column.
-              Rankings are scraped per weight class and matched to your roster.
-            </p>
-          </div>
-          <FloScrapeStatusBadge />
-        </div>
-
-        {/* URL input + Save */}
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={floUrl}
-            onChange={(e) => setFloUrl(e.target.value)}
-            placeholder="https://www.flowrestling.org/rankings/14300895-2025-26-ncaa-di-wrestling-rankings"
-            className="flex-1 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-          />
-          <button
-            onClick={handleSaveFloUrl}
-            disabled={savingFloUrl || !floUrl.trim()}
-            className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/50 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
-          >
-            {savingFloUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save URL'}
-          </button>
-        </div>
-
-        {scrapeSettings?.flowrestling_url && (
-          <div className="text-xs text-gray-500 -mt-2 truncate">
-            Saved: <span className="text-gray-400">{scrapeSettings.flowrestling_url}</span>
-          </div>
-        )}
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Sync Now button */}
-          <button
-            onClick={handleFloScrapeNow}
-            disabled={scrapingFlo || (!floUrl.trim() && !scrapeSettings?.flowrestling_url)}
-            className="flex-1 py-3 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            {scrapingFlo
-              ? <><Loader2 className="w-4 h-4 animate-spin" />Scraping rankings…</>
-              : <><RefreshCw className="w-4 h-4" />Sync Rankings Now</>}
-          </button>
-
-          {/* Auto-sync toggle */}
-          <button
-            onClick={handleToggleFloAuto}
-            disabled={togglingFloAuto || !scrapeSettings?.flowrestling_url}
-            className={`flex items-center gap-2 px-5 py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 ${
-              scrapeSettings?.flo_auto_scrape_enabled
-                ? 'bg-green-700 hover:bg-green-600 text-white'
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-            }`}
-          >
-            {togglingFloAuto
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : scrapeSettings?.flo_auto_scrape_enabled
-                ? <ToggleRight className="w-4 h-4" />
-                : <ToggleLeft className="w-4 h-4" />}
-            Auto-sync {scrapeSettings?.flo_auto_scrape_enabled ? 'ON' : 'OFF'}
-          </button>
-        </div>
-
-        {/* How it works note */}
-        <div className="bg-gray-800/60 rounded-lg p-4 text-xs text-gray-400 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-gray-300 font-medium">
-            <Trophy className="w-3.5 h-3.5" />
-            How it works
-          </div>
-          <p>
-            Paste the base rankings collection URL (e.g.{' '}
-            <code className="text-gray-300">flowrestling.org/rankings/14300895-…</code>).
-            The scraper discovers all weight-class sub-pages, fetches each one,
-            and matches ranked wrestlers to your roster by name + weight class.
-            Unmatched athletes keep their previous ranking.
-          </p>
-          <p className="text-gray-500">
-            Tip: You can paste any weight-class sub-URL — the bot will auto-navigate to the full collection.
-          </p>
         </div>
       </div>
 

@@ -93,7 +93,6 @@ export interface Athlete {
   weight: WeightClass
   school: string
   seed: number
-  flo_ranking: number | null   // FlowWrestling per-weight-class rank; null = unranked/not scraped
   is_drafted: boolean
   created_at: string
   // joined
