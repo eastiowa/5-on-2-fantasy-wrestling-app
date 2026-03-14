@@ -107,6 +107,7 @@ export default async function AthletesPage() {
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Weight</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">School</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Seed</th>
+                  <th className="text-left px-6 py-3 text-gray-400 font-medium">Flo Ranking</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Status</th>
                   <th className="text-left px-6 py-3 text-gray-400 font-medium">Actions</th>
                 </tr>
@@ -122,6 +123,15 @@ export default async function AthletesPage() {
                     </td>
                     <td className="px-6 py-3 text-gray-300">{athlete.school}</td>
                     <td className="px-6 py-3 text-gray-300">#{athlete.seed}</td>
+                    <td className="px-6 py-3">
+                      {athlete.flo_ranking != null ? (
+                        <span className="text-xs font-bold px-2 py-1 rounded-full bg-blue-950 text-blue-300 border border-blue-800">
+                          #{athlete.flo_ranking}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-600">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-3">
                       {athlete.is_drafted ? (
                         <span className="text-xs bg-blue-950 text-blue-400 border border-blue-800 px-2 py-1 rounded-full">

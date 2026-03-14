@@ -220,6 +220,11 @@ export function AvailableAthletes({
                         {flagMeta.label}
                       </span>
                     )}
+                    {athlete.flo_ranking != null && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 bg-blue-950/60 border-blue-700/40 text-blue-300">
+                        Flo #{athlete.flo_ranking}
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-gray-500 truncate">
                     {athlete.school} · Seed #{athlete.seed}
@@ -325,6 +330,11 @@ export function AvailableAthletes({
                         <span className={cn('font-medium truncate line-through text-sm', isMyAthlete ? 'text-yellow-600' : 'text-gray-500')}>
                           {athlete.name}
                         </span>
+                        {athlete.flo_ranking != null && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 bg-blue-950/40 border-blue-800/30 text-blue-400/70">
+                            Flo #{athlete.flo_ranking}
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-gray-600 truncate">
                         {athlete.school} · Seed #{athlete.seed}
