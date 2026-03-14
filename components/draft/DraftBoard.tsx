@@ -172,7 +172,6 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
           >
             <span className="text-gray-500">{needsOpen ? '▾' : '▸'}</span>
             Team Needs
-            <span className="text-gray-500 font-normal">— what each team still needs to draft</span>
           </button>
           {needsOpen && (
             <div className="flex rounded-md overflow-hidden border border-gray-700 shrink-0">
@@ -200,62 +199,107 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
 
         {needsOpen && (
           <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse min-w-[700px]">
-              <thead>
-                <tr className="border-b border-gray-800">
-                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium w-32 sticky left-0 bg-gray-950 z-10">Team</th>
-                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium">
-                    {needsView === 'seeds' ? 'Seeds Still Needed' : 'Weights Still Needed'}
-                  </th>
-                  <th className="text-right px-3 py-1.5 text-gray-500 font-medium w-16">Picks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {teamNeeds.map(({ team, neededSeeds, neededWeights, pickCount }) => {
-                  const isMyTeam = team.id === userTeamId
-                  const needed = needsView === 'seeds' ? neededSeeds : neededWeights
-                  const allDone = needed.length === 0
-                  return (
-                    <tr
-                      key={team.id}
-                      className={cn(
-                        'border-t border-gray-800/60',
-                        isMyTeam ? 'bg-yellow-400/5' : ''
-                      )}
-                    >
-                      <td className={cn(
-                        'px-3 py-1.5 font-medium truncate max-w-[128px] sticky left-0 z-10',
-                        isMyTeam ? 'text-yellow-300 bg-yellow-400/5' : 'text-gray-300 bg-gray-950'
-                      )}>
-                        {team.name}
-                      </td>
-                      <td className="px-3 py-1.5">
-                        {allDone ? (
-                          <span className="text-green-500 text-[10px] font-semibold">✓ Complete</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {(needed as (number | string)[]).map((val) => (
-                              <span
-                                key={val}
-                                className={cn(
-                                  'inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold',
+            {needsView === 'weights' ? (
+              <table className="w-full text-xs border-collapse min-w-[780px]">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left px-2 py-1.5 text-gray-500 font-medium w-28 sticky left-0 bg-gray-950 z-10">Team</th>
+                    {WEIGHT_CLASSES.map((w) => (
+                      <th key={w} className="px-1 py-1.5 text-center text-gray-400 font-medium w-10">{w}</th>
+                    ))}
+                    <th className="px-2 py-1.5 text-right text-gray-500 font-medium w-12">Picks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamNeeds.map(({ team, neededWeights, pickCount }) => {
+                    const isMyTeam = team.id === userTeamId
+                    const neededSet = new Set(neededWeights)
+                    return (
+                      <tr key={team.id} className={cn('border-t border-gray-800/60', isMyTeam ? 'bg-yellow-400/5' : '')}>
+                        <td className={cn(
+                          'px-2 py-1 font-medium truncate max-w-[112px] sticky left-0 z-10 text-[11px]',
+                          isMyTeam ? 'text-yellow-300 bg-yellow-400/5' : 'text-gray-300 bg-gray-950'
+                        )}>
+                          {team.name}
+                        </td>
+                        {WEIGHT_CLASSES.map((w) => {
+                          const needed = neededSet.has(w)
+                          return (
+                            <td key={w} className="px-1 py-1 text-center">
+                              {needed ? (
+                                <span className={cn(
+                                  'inline-flex items-center justify-center w-7 h-5 rounded text-[9px] font-bold',
                                   isMyTeam
-                                    ? 'bg-yellow-400/20 text-yellow-300 border border-yellow-700'
-                                    : 'bg-gray-800 text-gray-300 border border-gray-700'
-                                )}
-                              >
-                                {needsView === 'seeds' ? `#${val}` : val}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-1.5 text-right text-gray-500">{pickCount}/10</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                                    ? 'bg-yellow-400/25 text-yellow-300 border border-yellow-700'
+                                    : 'bg-red-950/50 text-red-400 border border-red-900'
+                                )}>
+                                  ✕
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-7 h-5 rounded text-[9px] font-bold bg-green-950/40 text-green-500 border border-green-900">
+                                  ✓
+                                </span>
+                              )}
+                            </td>
+                          )
+                        })}
+                        <td className="px-2 py-1 text-right text-gray-500 text-[10px]">{pickCount}/10</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <table className="w-full text-xs border-collapse min-w-[600px]">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left px-2 py-1.5 text-gray-500 font-medium w-28 sticky left-0 bg-gray-950 z-10">Team</th>
+                    {ALL_SEEDS.map((s) => (
+                      <th key={s} className="px-1 py-1.5 text-center text-gray-400 font-medium w-9">#{s}</th>
+                    ))}
+                    <th className="px-2 py-1.5 text-right text-gray-500 font-medium w-12">Picks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamNeeds.map(({ team, neededSeeds, pickCount }) => {
+                    const isMyTeam = team.id === userTeamId
+                    const neededSet = new Set(neededSeeds)
+                    return (
+                      <tr key={team.id} className={cn('border-t border-gray-800/60', isMyTeam ? 'bg-yellow-400/5' : '')}>
+                        <td className={cn(
+                          'px-2 py-1 font-medium truncate max-w-[112px] sticky left-0 z-10 text-[11px]',
+                          isMyTeam ? 'text-yellow-300 bg-yellow-400/5' : 'text-gray-300 bg-gray-950'
+                        )}>
+                          {team.name}
+                        </td>
+                        {ALL_SEEDS.map((s) => {
+                          const needed = neededSet.has(s)
+                          return (
+                            <td key={s} className="px-1 py-1 text-center">
+                              {needed ? (
+                                <span className={cn(
+                                  'inline-flex items-center justify-center w-6 h-5 rounded text-[9px] font-bold',
+                                  isMyTeam
+                                    ? 'bg-yellow-400/25 text-yellow-300 border border-yellow-700'
+                                    : 'bg-red-950/50 text-red-400 border border-red-900'
+                                )}>
+                                  ✕
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-6 h-5 rounded text-[9px] font-bold bg-green-950/40 text-green-500 border border-green-900">
+                                  ✓
+                                </span>
+                              )}
+                            </td>
+                          )
+                        })}
+                        <td className="px-2 py-1 text-right text-gray-500 text-[10px]">{pickCount}/10</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </div>
