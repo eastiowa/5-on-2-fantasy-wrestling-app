@@ -60,14 +60,16 @@ export async function POST() {
   //   Allowed when:
   //     a) Timer has expired  — any authenticated user may trigger
   //     b) activeTeam has auto_draft=true — any authenticated user may trigger
-  //     c) The caller IS a manager of the active team
-  //     d) The caller is the commissioner
+  //     c) The caller is the commissioner (admin override)
+  //
+  //   NOTE: Being the active team manager alone does NOT grant permission.
+  //   The timer must have genuinely elapsed or auto_draft must be enabled,
+  //   otherwise manual calls to this endpoint would bypass both safeguards.
   const { data: profile } = await supabase
     .from('profiles').select('role, team_id').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
   const isCommissioner = profile.role === 'commissioner'
-  const isActiveTeamManager = profile.team_id === activeTeam.id
 
   // Check timer expiry (server-side)
   const timerEnabled = draftSettings.pick_timer_seconds > 0
@@ -81,7 +83,7 @@ export async function POST() {
   const teamRecord = teamsRaw.find((t) => t.id === activeTeam.id)
   const teamAutoDraft = teamRecord?.auto_draft === true
 
-  if (!isCommissioner && !isActiveTeamManager && !timerExpired && !teamAutoDraft) {
+  if (!isCommissioner && !timerExpired && !teamAutoDraft) {
     return NextResponse.json(
       { error: 'Cannot autopick: timer has not expired and autodraft is not enabled for this team.' },
       { status: 403 }
