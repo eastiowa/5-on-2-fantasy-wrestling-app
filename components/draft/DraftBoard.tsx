@@ -198,6 +198,17 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
         </div>
 
         {needsOpen && (
+          <div>
+          <div className="flex items-center gap-4 px-3 py-1.5 border-b border-gray-800/60 text-[10px] text-gray-500">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-5 h-3 rounded bg-green-600/70" />
+              Drafted
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-5 h-3 rounded bg-gray-800/60 border border-gray-700" />
+              Still needed
+            </span>
+          </div>
           <div className="overflow-x-auto">
             {needsView === 'weights' ? (
               <table className="w-full text-xs border-collapse min-w-[780px]">
@@ -226,20 +237,16 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
                           const needed = neededSet.has(w)
                           return (
                             <td key={w} className="px-1 py-1 text-center">
-                              {needed ? (
-                                <span className={cn(
-                                  'inline-flex items-center justify-center w-7 h-5 rounded text-[9px] font-bold',
-                                  isMyTeam
-                                    ? 'bg-yellow-400/25 text-yellow-300 border border-yellow-700'
-                                    : 'bg-red-950/50 text-red-400 border border-red-900'
-                                )}>
-                                  ✕
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center justify-center w-7 h-5 rounded text-[9px] font-bold bg-green-950/40 text-green-500 border border-green-900">
-                                  ✓
-                                </span>
-                              )}
+                              <span className={cn(
+                                'inline-block w-7 h-4 rounded',
+                                needed
+                                  ? isMyTeam
+                                    ? 'bg-gray-700/50 border border-gray-600'
+                                    : 'bg-gray-800/60 border border-gray-700'
+                                  : isMyTeam
+                                    ? 'bg-yellow-400/70'
+                                    : 'bg-green-600/70'
+                              )} />
                             </td>
                           )
                         })}
@@ -276,20 +283,16 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
                           const needed = neededSet.has(s)
                           return (
                             <td key={s} className="px-1 py-1 text-center">
-                              {needed ? (
-                                <span className={cn(
-                                  'inline-flex items-center justify-center w-6 h-5 rounded text-[9px] font-bold',
-                                  isMyTeam
-                                    ? 'bg-yellow-400/25 text-yellow-300 border border-yellow-700'
-                                    : 'bg-red-950/50 text-red-400 border border-red-900'
-                                )}>
-                                  ✕
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center justify-center w-6 h-5 rounded text-[9px] font-bold bg-green-950/40 text-green-500 border border-green-900">
-                                  ✓
-                                </span>
-                              )}
+                              <span className={cn(
+                                'inline-block w-6 h-4 rounded',
+                                needed
+                                  ? isMyTeam
+                                    ? 'bg-gray-700/50 border border-gray-600'
+                                    : 'bg-gray-800/60 border border-gray-700'
+                                  : isMyTeam
+                                    ? 'bg-yellow-400/70'
+                                    : 'bg-green-600/70'
+                              )} />
                             </td>
                           )
                         })}
@@ -300,6 +303,7 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
                 </tbody>
               </table>
             )}
+          </div>
           </div>
         )}
       </div>
