@@ -228,7 +228,7 @@ export function DraftRoom({
   return (
     <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100vh-8rem)] flex flex-col gap-3 max-w-7xl mx-auto">
       {/* Status bar */}
-      <div className={cn('rounded-xl border px-3 sm:px-5 py-2.5 flex items-center gap-3 flex-wrap',
+      <div className={cn('rounded-xl border px-3 sm:px-4 py-1.5 flex items-center gap-2 flex-wrap',
         settings.status === 'active' && isMyTurn ? 'bg-green-950/50 border-green-800' :
         settings.status === 'active' ? 'bg-gray-900 border-gray-800' :
         settings.status === 'paused' ? 'bg-yellow-950/50 border-yellow-800' :
@@ -244,10 +244,10 @@ export function DraftRoom({
               />
             )}
             <div className="flex-1 min-w-0">
-              <div className={cn('font-bold text-sm sm:text-lg leading-tight', isMyTurn ? 'text-green-400' : 'text-white')}>
+              <div className={cn('font-bold text-xs sm:text-sm leading-tight', isMyTurn ? 'text-green-400' : 'text-white')}>
                 {isMyTurn ? '🏆 YOUR TURN!' : `On the Clock: ${currentPickInfo.team_name}`}
               </div>
-              <div className="text-xs sm:text-sm text-gray-400">
+              <div className="text-[10px] sm:text-xs text-gray-400">
                 {formatPickLabel(settings.current_pick_number)} · {picks.length}/100 picks
               </div>
             </div>
@@ -256,7 +256,7 @@ export function DraftRoom({
 
         {/* On the Clock / Up Next / In the Hole cards */}
         {next3.length > 0 && (
-          <div className="w-full grid grid-cols-3 gap-2 pt-1">
+          <div className="w-full grid grid-cols-3 gap-1.5">
             {next3.map(({ team, pickNum }, i) => {
               const CARD_STYLES = [
                 { label: 'On the Clock', color: 'text-green-400',  border: 'border-green-800',  bg: 'bg-green-950/40'  },
@@ -266,28 +266,29 @@ export function DraftRoom({
               const { label, color, border, bg } = CARD_STYLES[i]
               const isMe = team.id === userTeamId
               return (
-                <div key={pickNum} className={cn('flex flex-col gap-0.5 px-3 py-2 rounded-lg border', bg, border)}>
-                  <span className={cn('text-[9px] sm:text-[10px] font-bold uppercase tracking-widest', color)}>{label}</span>
-                  <span className={cn('font-semibold text-xs sm:text-sm leading-tight truncate', isMe ? 'text-yellow-300' : 'text-white')}>
+                <div key={pickNum} className={cn('flex items-center gap-2 px-2 py-1 rounded-lg border', bg, border)}>
+                  <span className={cn('text-[8px] font-bold uppercase tracking-widest shrink-0 hidden sm:block', color)}>{label}</span>
+                  <span className={cn('font-semibold text-[10px] sm:text-xs leading-tight truncate flex-1', isMe ? 'text-yellow-300' : 'text-white')}>
+                    <span className={cn('text-[8px] font-bold uppercase tracking-widest mr-1 sm:hidden', color)}>{label.split(' ')[0]}</span>
                     {isMe ? '⭐ You!' : team.name}
                   </span>
-                  <span className="text-[9px] text-gray-500">Pick #{pickNum}</span>
+                  <span className="text-[8px] text-gray-500 shrink-0">#{pickNum}</span>
                 </div>
               )
             })}
           </div>
         )}
         {settings.status === 'paused' && (
-          <div className="text-yellow-400 font-bold">⏸ Draft Paused</div>
+          <div className="text-yellow-400 font-bold text-sm">⏸ Draft Paused</div>
         )}
         {settings.status === 'pending' && (
           settings.draft_start_date && new Date(settings.draft_start_date) > new Date()
             ? <DraftCountdown draftStartDate={settings.draft_start_date} />
-            : <div className="text-gray-400">Draft has not started yet. Waiting for Commissioner.</div>
+            : <div className="text-gray-400 text-sm">Draft has not started yet. Waiting for Commissioner.</div>
         )}
         {settings.status === 'complete' && (
-          <div className="flex items-center gap-2 text-blue-400 font-bold">
-            <Trophy className="w-5 h-5" />
+          <div className="flex items-center gap-2 text-blue-400 font-bold text-sm">
+            <Trophy className="w-4 h-4" />
             Draft Complete! All 100 picks have been made.
           </div>
         )}
@@ -295,8 +296,8 @@ export function DraftRoom({
         {/* My roster summary */}
         {userTeamId && (
           <div className="ml-auto text-right shrink-0">
-            <div className="text-xs text-gray-500">My Roster</div>
-            <div className="text-sm font-semibold text-white">{myPicks.length}/10 picked</div>
+            <div className="text-[10px] text-gray-500">My Roster</div>
+            <div className="text-xs font-semibold text-white">{myPicks.length}/10</div>
           </div>
         )}
       </div>

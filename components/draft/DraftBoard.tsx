@@ -1,8 +1,11 @@
 'use client'
 
-import { DraftPick, Athlete, DraftStatus } from '@/types'
+import { useState } from 'react'
+import { DraftPick, Athlete, DraftStatus, WEIGHT_CLASSES } from '@/types'
 import { buildFullDraftOrder, getPickMeta } from '@/lib/draft-logic'
 import { cn } from '@/lib/utils'
+
+const ALL_SEEDS = Array.from({ length: 10 }, (_, i) => i + 1)
 
 /** "Easton Kuboushek" → "E. Kuboushek" */
 function fmtName(name: string | undefined): string {
@@ -21,6 +24,9 @@ interface DraftBoardProps {
 }
 
 export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId }: DraftBoardProps) {
+  const [needsView, setNeedsView] = useState<'seeds' | 'weights'>('seeds')
+  const [needsOpen, setNeedsOpen] = useState(true)
+
   const orderedTeams = [...teams].sort((a, b) => (a.draft_position ?? 99) - (b.draft_position ?? 99))
 
   if (orderedTeams.length < 10) {
@@ -33,6 +39,19 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
 
   const fullOrder = buildFullDraftOrder(orderedTeams as any)
   const pickMap = new Map(picks.map((p) => [p.pick_number, p]))
+
+  // Compute per-team needs
+  const teamNeeds = orderedTeams.map((team) => {
+    const teamPicks = picks.filter((p) => p.team_id === team.id)
+    const draftedSeeds = new Set(teamPicks.map((p) => p.athlete?.seed).filter((s): s is number => s != null))
+    const draftedWeights = new Set(teamPicks.map((p) => p.athlete?.weight).filter((w) => w != null))
+    return {
+      team,
+      neededSeeds: ALL_SEEDS.filter((s) => !draftedSeeds.has(s)),
+      neededWeights: WEIGHT_CLASSES.filter((w) => !draftedWeights.has(w)),
+      pickCount: teamPicks.length,
+    }
+  })
 
   // Group by round
   const ROUNDS = 10
@@ -141,6 +160,104 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
           <span className="text-yellow-400 font-bold">●</span>
           Current pick
         </span>
+      </div>
+
+      {/* Team Needs */}
+      <div className="border border-gray-800 rounded-xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-2 px-3 py-2 bg-gray-900 border-b border-gray-800">
+          <button
+            onClick={() => setNeedsOpen((v) => !v)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-300 hover:text-white transition-colors flex-1 text-left"
+          >
+            <span className="text-gray-500">{needsOpen ? '▾' : '▸'}</span>
+            Team Needs
+            <span className="text-gray-500 font-normal">— what each team still needs to draft</span>
+          </button>
+          {needsOpen && (
+            <div className="flex rounded-md overflow-hidden border border-gray-700 shrink-0">
+              <button
+                onClick={() => setNeedsView('seeds')}
+                className={cn(
+                  'px-2.5 py-0.5 text-[10px] font-semibold transition-colors',
+                  needsView === 'seeds' ? 'bg-yellow-400 text-gray-900' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Seeds
+              </button>
+              <button
+                onClick={() => setNeedsView('weights')}
+                className={cn(
+                  'px-2.5 py-0.5 text-[10px] font-semibold transition-colors',
+                  needsView === 'weights' ? 'bg-yellow-400 text-gray-900' : 'text-gray-400 hover:text-white'
+                )}
+              >
+                Weights
+              </button>
+            </div>
+          )}
+        </div>
+
+        {needsOpen && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs border-collapse min-w-[700px]">
+              <thead>
+                <tr className="border-b border-gray-800">
+                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium w-32 sticky left-0 bg-gray-950 z-10">Team</th>
+                  <th className="text-left px-3 py-1.5 text-gray-500 font-medium">
+                    {needsView === 'seeds' ? 'Seeds Still Needed' : 'Weights Still Needed'}
+                  </th>
+                  <th className="text-right px-3 py-1.5 text-gray-500 font-medium w-16">Picks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamNeeds.map(({ team, neededSeeds, neededWeights, pickCount }) => {
+                  const isMyTeam = team.id === userTeamId
+                  const needed = needsView === 'seeds' ? neededSeeds : neededWeights
+                  const allDone = needed.length === 0
+                  return (
+                    <tr
+                      key={team.id}
+                      className={cn(
+                        'border-t border-gray-800/60',
+                        isMyTeam ? 'bg-yellow-400/5' : ''
+                      )}
+                    >
+                      <td className={cn(
+                        'px-3 py-1.5 font-medium truncate max-w-[128px] sticky left-0 z-10',
+                        isMyTeam ? 'text-yellow-300 bg-yellow-400/5' : 'text-gray-300 bg-gray-950'
+                      )}>
+                        {team.name}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {allDone ? (
+                          <span className="text-green-500 text-[10px] font-semibold">✓ Complete</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {(needed as (number | string)[]).map((val) => (
+                              <span
+                                key={val}
+                                className={cn(
+                                  'inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold',
+                                  isMyTeam
+                                    ? 'bg-yellow-400/20 text-yellow-300 border border-yellow-700'
+                                    : 'bg-gray-800 text-gray-300 border border-gray-700'
+                                )}
+                              >
+                                {needsView === 'seeds' ? `#${val}` : val}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-gray-500">{pickCount}/10</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
