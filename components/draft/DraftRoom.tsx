@@ -18,7 +18,7 @@ import { Trophy, Clock, Users, List, MessageSquare, BookmarkPlus, LayoutGrid } f
 
 interface DraftRoomProps {
   initialSettings: DraftSettings
-  teams: Array<{ id: string; name: string; draft_position: number | null; manager_id: string | null; auto_draft: boolean }>
+  teams: Array<{ id: string; name: string; draft_position: number | null; manager_id: string | null; auto_draft?: boolean }>
   initialAthletes: Athlete[]
   initialPicks: Array<DraftPick & { athlete: Athlete }>
   initialMessages: ChatMessage[]
@@ -55,9 +55,22 @@ export function DraftRoom({
   const [pickError, setPickError] = useState<string | null>(null)
 
   // ── Autodraft state ────────────────────────────────────────────────────────
-  const myTeamData = teams.find((t) => t.id === userTeamId)
-  const [autoDraft, setAutoDraft] = useState<boolean>(myTeamData?.auto_draft ?? false)
+  const [autoDraft, setAutoDraft] = useState<boolean>(false)
   const autoPickCalledForPick = useRef<number | null>(null)
+
+  // Load auto_draft from server (gracefully handles column not existing yet)
+  useEffect(() => {
+    if (!userTeamId) return
+    fetch('/api/teams')
+      .then((r) => r.json())
+      .then((data: Array<{ id: string; auto_draft?: boolean }>) => {
+        if (Array.isArray(data)) {
+          const myTeam = data.find((t) => t.id === userTeamId)
+          if (myTeam?.auto_draft != null) setAutoDraft(myTeam.auto_draft)
+        }
+      })
+      .catch(() => {/* column may not exist yet — default false is fine */})
+  }, [userTeamId])
 
   // ── Private athlete flags (STUD / OK / PUD) — persisted via /api/draft/flags ─
   const [flags, setFlags] = useState<Map<string, FlagValue>>(new Map())
