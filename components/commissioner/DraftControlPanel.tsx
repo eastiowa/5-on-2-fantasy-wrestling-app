@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { DraftSettings, DraftPick } from '@/types'
 import { buildFullDraftOrder } from '@/lib/draft-logic'
-import { Play, Pause, RotateCcw, SkipForward, CheckCircle, AlertCircle, Loader2, CalendarClock, X } from 'lucide-react'
+import { Play, Pause, RotateCcw, SkipForward, CheckCircle, AlertCircle, Loader2, CalendarClock, X, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DraftCountdown } from '@/components/shared/DraftCountdown'
 
@@ -17,6 +17,8 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
   const [settings, setSettings] = useState(initialSettings)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [removingPickId, setRemovingPickId] = useState<string | null>(null)
+  const [localPicks, setLocalPicks] = useState(picks)
 
   // Draft start date state
   // Convert stored ISO to local datetime-local value (yyyy-MM-ddTHH:mm)
@@ -46,6 +48,28 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
     } else {
       setSettings((s) => ({ ...s, draft_start_date: isoValue }))
       setMessage({ type: 'success', text: isoValue ? 'Draft start date saved' : 'Draft start date cleared' })
+    }
+  }
+
+  async function removePick(pickId: string, pickNumber: number, subsequentCount: number) {
+    const msg = subsequentCount > 0
+      ? `Remove pick #${pickNumber} and ${subsequentCount} subsequent pick(s)? All affected athletes will be returned to the available pool and the draft will roll back to pick #${pickNumber}.`
+      : `Remove pick #${pickNumber}? The athlete will be returned to the available pool and the draft will roll back to pick #${pickNumber}.`
+    if (!confirm(msg)) return
+
+    setRemovingPickId(pickId)
+    setMessage(null)
+
+    const res = await fetch(`/api/draft/pick/${pickId}`, { method: 'DELETE' })
+    const data = await res.json()
+    setRemovingPickId(null)
+
+    if (!res.ok) {
+      setMessage({ type: 'error', text: data.error ?? 'Failed to remove pick' })
+    } else {
+      setLocalPicks((prev) => prev.filter((p) => p.pick_number < pickNumber))
+      setSettings((s) => ({ ...s, current_pick_number: pickNumber, status: 'active' }))
+      setMessage({ type: 'success', text: `Removed pick #${pickNumber} — draft rolled back. ${data.picks_deleted} pick(s) deleted, ${data.athletes_reset} athlete(s) reset.` })
     }
   }
 
@@ -220,10 +244,10 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
       )}
 
       {/* Draft board */}
-      {picks.length > 0 && (
+      {localPicks.length > 0 && (
         <div className="bg-gray-900 rounded-xl border border-orange-600/20 overflow-hidden">
           <div className="px-6 py-4 border-b border-orange-600/30">
-            <h3 className="font-semibold text-white">Pick History ({picks.length} picks made)</h3>
+            <h3 className="font-semibold text-white">Pick History ({localPicks.length} picks made)</h3>
           </div>
           <div className="overflow-x-auto max-h-96 overflow-y-auto">
             <table className="w-full text-sm">
@@ -234,18 +258,34 @@ export function DraftControlPanel({ initialSettings, teams, picks }: DraftContro
                   <th className="text-left px-4 py-3 text-gray-400">Athlete</th>
                   <th className="text-left px-4 py-3 text-gray-400">Weight</th>
                   <th className="text-left px-4 py-3 text-gray-400">Seed</th>
+                  <th className="text-left px-4 py-3 text-gray-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {picks.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-800/30">
-                    <td className="px-4 py-3 font-mono text-yellow-400">#{p.pick_number}</td>
-                    <td className="px-4 py-3 text-white">{p.team?.name}</td>
-                    <td className="px-4 py-3 text-white">{p.athlete?.name}</td>
-                    <td className="px-4 py-3 text-gray-400">{p.athlete?.weight} lbs</td>
-                    <td className="px-4 py-3 text-gray-400">#{p.athlete?.seed}</td>
-                  </tr>
-                ))}
+                {localPicks.map((p) => {
+                  const subsequentCount = localPicks.filter((x) => x.pick_number > p.pick_number).length
+                  const isRemoving = removingPickId === p.id
+                  return (
+                    <tr key={p.id} className="hover:bg-gray-800/30">
+                      <td className="px-4 py-3 font-mono text-yellow-400">#{p.pick_number}</td>
+                      <td className="px-4 py-3 text-white">{p.team?.name}</td>
+                      <td className="px-4 py-3 text-white">{p.athlete?.name}</td>
+                      <td className="px-4 py-3 text-gray-400">{p.athlete?.weight} lbs</td>
+                      <td className="px-4 py-3 text-gray-400">#{p.athlete?.seed}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => removePick(p.id, p.pick_number, subsequentCount)}
+                          disabled={isRemoving || removingPickId !== null}
+                          title={subsequentCount > 0 ? `Remove this pick and ${subsequentCount} pick(s) after it` : 'Remove this pick'}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-red-950 hover:bg-red-900 border border-red-800 text-red-400 rounded transition-colors disabled:opacity-40"
+                        >
+                          {isRemoving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                          {subsequentCount > 0 ? `Remove (+${subsequentCount})` : 'Remove'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

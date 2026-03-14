@@ -14,7 +14,7 @@ import { AthleteRosterGrid } from './AthleteRosterGrid'
 import { DraftCountdown } from '@/components/shared/DraftCountdown'
 import { cn } from '@/lib/utils'
 import { formatPickLabel } from '@/lib/draft-logic'
-import { Trophy, Clock, Users, List, MessageSquare, BookmarkPlus, LayoutGrid } from 'lucide-react'
+import { Trophy, Clock, Users, List, MessageSquare, BookmarkPlus, LayoutGrid, X, CheckCircle2 } from 'lucide-react'
 
 interface DraftRoomProps {
   initialSettings: DraftSettings
@@ -53,6 +53,7 @@ export function DraftRoom({
   const [activeTab, setActiveTab] = useState<TabKey>('athletes')
   const [picking, setPicking] = useState(false)
   const [pickError, setPickError] = useState<string | null>(null)
+  const [pendingPickAthleteId, setPendingPickAthleteId] = useState<string | null>(null)
   const [onlineTeamIds, setOnlineTeamIds] = useState<Set<string>>(new Set())
 
   // ── Autodraft state ────────────────────────────────────────────────────────
@@ -227,7 +228,16 @@ export function DraftRoom({
     })
   }, [wishlist, userTeamId])
 
-  const handlePick = useCallback(async (athleteId: string) => {
+  // Step 1: Show confirmation modal
+  const handlePick = useCallback((athleteId: string) => {
+    setPendingPickAthleteId(athleteId)
+  }, [])
+
+  // Step 2: Actually submit after confirmation
+  const confirmPick = useCallback(async () => {
+    if (!pendingPickAthleteId) return
+    const athleteId = pendingPickAthleteId
+    setPendingPickAthleteId(null)
     setPicking(true)
     setPickError(null)
 
@@ -240,7 +250,7 @@ export function DraftRoom({
     setPicking(false)
 
     if (!res.ok) setPickError(data.error)
-  }, [])
+  }, [pendingPickAthleteId])
 
   // Trigger server-side autopick (timer expired or autodraft enabled)
   const triggerAutoPick = useCallback(async () => {
@@ -255,6 +265,32 @@ export function DraftRoom({
   const handleTimerExpire = useCallback(() => {
     triggerAutoPick()
   }, [triggerAutoPick])
+
+  const handleRemovePick = useCallback(async (pickId: string, pickNumber: number, subsequentCount: number) => {
+    const msg = subsequentCount > 0
+      ? `Remove pick #${pickNumber} and ${subsequentCount} subsequent pick(s)? All affected athletes will be returned to the available pool.`
+      : `Remove pick #${pickNumber}? The athlete will be returned to the available pool.`
+    if (!confirm(msg)) return
+
+    const res = await fetch(`/api/draft/pick/${pickId}`, { method: 'DELETE' })
+    const data = await res.json()
+
+    if (!res.ok) {
+      alert(data.error ?? 'Failed to remove pick')
+      return
+    }
+
+    // Update local state optimistically — realtime will also sync all connected clients
+    setPicks((prev) => prev.filter((p) => p.pick_number < pickNumber))
+    setAthletes((prev) => prev.map((a) => {
+      // We don't know which athlete_ids were reset, but the realtime athlete UPDATE
+      // will handle it. Locally mark all picks-removed athletes as available.
+      return a
+    }))
+    // Re-fetch athletes to sync is_drafted flags
+    const { data: freshAthletes } = await supabase.from('athletes').select('*').order('weight').order('seed')
+    if (freshAthletes) setAthletes(freshAthletes as any)
+  }, [supabase])
 
   // Toggle autodraft for my team
   const handleToggleAutoDraft = useCallback(async () => {
@@ -298,6 +334,8 @@ export function DraftRoom({
       next3.push({ team: { id: team.id, name: team.name }, pickNum })
     }
   }
+
+  const pendingAthlete = pendingPickAthleteId ? athletes.find((a) => a.id === pendingPickAthleteId) : null
 
   return (
     <div className="h-[calc(100dvh-5.5rem)] sm:h-[calc(100vh-8rem)] flex flex-col gap-3 max-w-7xl mx-auto">
@@ -501,6 +539,8 @@ export function DraftRoom({
               status={settings.status}
               userTeamId={userTeamId}
               onlineTeamIds={onlineTeamIds}
+              isCommissioner={userRole === 'commissioner'}
+              onRemovePick={userRole === 'commissioner' ? handleRemovePick : undefined}
             />
           )}
           {activeTab === 'chat' && (
@@ -514,6 +554,62 @@ export function DraftRoom({
           )}
         </div>
       </div>
+
+      {/* ── Pick Confirmation Modal ─────────────────────────────────────────── */}
+      {pendingAthlete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+          onClick={() => setPendingPickAthleteId(null)}
+        >
+          <div
+            className="bg-gray-900 border border-yellow-400/40 rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-white">Confirm Pick</h2>
+              <button
+                onClick={() => setPendingPickAthleteId(null)}
+                className="text-gray-500 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Athlete card */}
+            <div className="bg-gray-800 rounded-xl p-4 space-y-1 border border-gray-700">
+              <div className="text-xl font-bold text-white">{pendingAthlete.name}</div>
+              <div className="flex items-center gap-3 text-sm text-gray-400 flex-wrap">
+                <span className="text-yellow-400 font-semibold">{pendingAthlete.weight} lbs</span>
+                <span>Seed #{pendingAthlete.seed}</span>
+                {pendingAthlete.school && <span className="text-gray-500">{pendingAthlete.school}</span>}
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-400 text-center">
+              Are you sure you want to draft this athlete? This cannot be undone.
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPendingPickAthleteId(null)}
+                className="flex-1 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPick}
+                disabled={picking}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/50 text-gray-900 font-bold rounded-lg transition-colors"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Draft!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

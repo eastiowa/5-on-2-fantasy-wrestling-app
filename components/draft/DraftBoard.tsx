@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { DraftPick, Athlete, DraftStatus, WEIGHT_CLASSES } from '@/types'
 import { buildFullDraftOrder, getPickMeta } from '@/lib/draft-logic'
 import { cn } from '@/lib/utils'
+import { Trash2 } from 'lucide-react'
 
 const ALL_SEEDS = Array.from({ length: 10 }, (_, i) => i + 1)
 
@@ -22,9 +23,11 @@ interface DraftBoardProps {
   status: DraftStatus
   userTeamId: string | null
   onlineTeamIds?: Set<string>
+  isCommissioner?: boolean
+  onRemovePick?: (pickId: string, pickNumber: number, subsequentCount: number) => void
 }
 
-export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId, onlineTeamIds }: DraftBoardProps) {
+export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId, onlineTeamIds, isCommissioner, onRemovePick }: DraftBoardProps) {
   const [needsView, setNeedsView] = useState<'seeds' | 'weights'>('seeds')
   const [needsOpen, setNeedsOpen] = useState(true)
 
@@ -134,13 +137,26 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
                         )}
                       >
                         {pick ? (
-                          <div className="space-y-0.5">
+                          <div className="space-y-0.5 group relative">
                             <div className="font-medium text-white leading-tight truncate max-w-[90px]">
                               {fmtName(pick.athlete?.name)}
                             </div>
                             <div className="text-gray-500 text-[10px]">
                               {pick.athlete?.weight} · #{pick.athlete?.seed}
                             </div>
+                            {isCommissioner && onRemovePick && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const subsequent = picks.filter((x) => x.pick_number > pick.pick_number).length
+                                  onRemovePick(pick.id, pick.pick_number, subsequent)
+                                }}
+                                title={`Remove pick #${pick.pick_number}${picks.filter(x => x.pick_number > pick.pick_number).length > 0 ? ` (+${picks.filter(x => x.pick_number > pick.pick_number).length} after)` : ''}`}
+                                className="absolute -top-1 -right-1 hidden group-hover:flex items-center justify-center w-4 h-4 bg-red-600 hover:bg-red-500 text-white rounded-full text-[9px] leading-none z-20"
+                              >
+                                <Trash2 className="w-2.5 h-2.5" />
+                              </button>
+                            )}
                           </div>
                         ) : isCurrent ? (
                           <div className="text-yellow-400 font-bold animate-pulse">●</div>
