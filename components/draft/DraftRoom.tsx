@@ -53,6 +53,7 @@ export function DraftRoom({
   const [activeTab, setActiveTab] = useState<TabKey>('athletes')
   const [picking, setPicking] = useState(false)
   const [pickError, setPickError] = useState<string | null>(null)
+  const [onlineTeamIds, setOnlineTeamIds] = useState<Set<string>>(new Set())
 
   // ── Autodraft state ────────────────────────────────────────────────────────
   const [autoDraft, setAutoDraft] = useState<boolean>(false)
@@ -186,11 +187,31 @@ export function DraftRoom({
         })
       .subscribe()
 
+    // Presence — track who is online by team_id
+    const presenceCh = supabase.channel(`draft-presence`, {
+      config: { presence: { key: userId } },
+    })
+    presenceCh
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceCh.presenceState<{ team_id: string | null }>()
+        const ids = new Set<string>()
+        Object.values(state).forEach((entries) =>
+          entries.forEach((e) => { if (e.team_id) ids.add(e.team_id) })
+        )
+        setOnlineTeamIds(ids)
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceCh.track({ team_id: userTeamId ?? null })
+        }
+      })
+
     return () => {
       supabase.removeChannel(settingsSub)
       supabase.removeChannel(picksSub)
       supabase.removeChannel(chatSub)
       supabase.removeChannel(wishlistSub)
+      supabase.removeChannel(presenceCh)
     }
   }, [userTeamId])
 
@@ -479,6 +500,7 @@ export function DraftRoom({
               currentPickNumber={settings.current_pick_number}
               status={settings.status}
               userTeamId={userTeamId}
+              onlineTeamIds={onlineTeamIds}
             />
           )}
           {activeTab === 'chat' && (

@@ -21,9 +21,10 @@ interface DraftBoardProps {
   currentPickNumber: number
   status: DraftStatus
   userTeamId: string | null
+  onlineTeamIds?: Set<string>
 }
 
-export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId }: DraftBoardProps) {
+export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId, onlineTeamIds }: DraftBoardProps) {
   const [needsView, setNeedsView] = useState<'seeds' | 'weights'>('seeds')
   const [needsOpen, setNeedsOpen] = useState(true)
 
@@ -72,18 +73,30 @@ export function DraftBoard({ teams, picks, currentPickNumber, status, userTeamId
           <thead>
             <tr>
               <th className="text-left px-2 py-2 text-gray-400 font-medium w-16 sticky left-0 bg-gray-950 z-10">Rd</th>
-              {orderedTeams.map((team, i) => (
-                <th
-                  key={team.id}
-                  className={cn(
-                    'px-2 py-2 text-center font-medium truncate max-w-[90px]',
-                    team.id === userTeamId ? 'text-yellow-400' : 'text-gray-400'
-                  )}
-                  title={team.name}
-                >
-                  {team.name}
-                </th>
-              ))}
+              {orderedTeams.map((team) => {
+                const isOnline = onlineTeamIds?.has(team.id) ?? false
+                return (
+                  <th
+                    key={team.id}
+                    className={cn(
+                      'px-2 py-1.5 text-center font-medium max-w-[90px]',
+                      team.id === userTeamId ? 'text-yellow-400' : 'text-gray-400'
+                    )}
+                    title={`${team.name}${isOnline ? ' (online)' : ''}`}
+                  >
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span
+                        className={cn(
+                          'w-1.5 h-1.5 rounded-full transition-colors',
+                          isOnline ? 'bg-green-400' : 'bg-gray-700'
+                        )}
+                        title={isOnline ? 'Online' : 'Offline'}
+                      />
+                      <span className="truncate max-w-[80px] block">{team.name}</span>
+                    </div>
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody>
