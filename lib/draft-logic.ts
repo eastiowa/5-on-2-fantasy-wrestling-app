@@ -123,7 +123,7 @@ export function getEligibleAthletes(
 }
 
 /**
- * Returns the top available wishlist athlete for auto-pick.
+ * Returns the top available wishlist athlete that the team can legally pick.
  */
 export function getAutoPickAthlete(
   wishlist: Array<{ athlete_id: string; rank: number }>,
@@ -143,6 +143,39 @@ export function getAutoPickAthlete(
     }
   }
   return null
+}
+
+/**
+ * Returns the best available athlete for auto-pick when the wishlist has no
+ * eligible options. Selection priority:
+ *   1. Lowest seed number (seed 1 = highest-ranked)
+ *   2. Ties broken by weight class order (lightest first)
+ *
+ * Only returns athletes that pass validatePick for the given team.
+ */
+export function getBestAvailableAthlete(
+  athletes: Athlete[],
+  teamId: string,
+  existingPicks: DraftPick[]
+): Athlete | null {
+  const eligible = athletes
+    .filter((a) => !a.is_drafted && validatePick(a, { id: teamId } as Team, existingPicks) === null)
+    .sort((a, b) => a.seed - b.seed || a.weight - b.weight)
+  return eligible[0] ?? null
+}
+
+/**
+ * Full auto-pick selection: wishlist first, then best available athlete.
+ */
+export function selectAutoPickAthlete(
+  wishlist: Array<{ athlete_id: string; rank: number }>,
+  athletes: Athlete[],
+  teamId: string,
+  existingPicks: DraftPick[]
+): Athlete | null {
+  const fromWishlist = getAutoPickAthlete(wishlist, athletes, teamId, existingPicks)
+  if (fromWishlist) return fromWishlist
+  return getBestAvailableAthlete(athletes, teamId, existingPicks)
 }
 
 /**

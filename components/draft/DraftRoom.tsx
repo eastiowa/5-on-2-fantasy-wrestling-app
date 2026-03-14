@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DraftSettings, Athlete, DraftPick, ChatMessage, WishlistItem, UserRole } from '@/types'
 import { FlagValue } from '@/lib/athlete-flags'
@@ -18,7 +18,7 @@ import { Trophy, Clock, Users, List, MessageSquare, BookmarkPlus, LayoutGrid } f
 
 interface DraftRoomProps {
   initialSettings: DraftSettings
-  teams: Array<{ id: string; name: string; draft_position: number | null; manager_id: string | null }>
+  teams: Array<{ id: string; name: string; draft_position: number | null; manager_id: string | null; auto_draft: boolean }>
   initialAthletes: Athlete[]
   initialPicks: Array<DraftPick & { athlete: Athlete }>
   initialMessages: ChatMessage[]
@@ -53,6 +53,11 @@ export function DraftRoom({
   const [activeTab, setActiveTab] = useState<TabKey>('athletes')
   const [picking, setPicking] = useState(false)
   const [pickError, setPickError] = useState<string | null>(null)
+
+  // ── Autodraft state ────────────────────────────────────────────────────────
+  const myTeamData = teams.find((t) => t.id === userTeamId)
+  const [autoDraft, setAutoDraft] = useState<boolean>(myTeamData?.auto_draft ?? false)
+  const autoPickCalledForPick = useRef<number | null>(null)
 
   // ── Private athlete flags (STUD / OK / PUD) — persisted via /api/draft/flags ─
   const [flags, setFlags] = useState<Map<string, FlagValue>>(new Map())
@@ -203,6 +208,41 @@ export function DraftRoom({
     if (!res.ok) setPickError(data.error)
   }, [])
 
+  // Trigger server-side autopick (timer expired or autodraft enabled)
+  const triggerAutoPick = useCallback(async () => {
+    const res = await fetch('/api/draft/autopick', { method: 'POST' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      console.warn('[autopick]', data.error)
+    }
+  }, [])
+
+  // Called when the timer countdown hits zero
+  const handleTimerExpire = useCallback(() => {
+    triggerAutoPick()
+  }, [triggerAutoPick])
+
+  // Toggle autodraft for my team
+  const handleToggleAutoDraft = useCallback(async () => {
+    if (!userTeamId) return
+    const newValue = !autoDraft
+    setAutoDraft(newValue)
+    await fetch(`/api/teams/${userTeamId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ auto_draft: newValue }),
+    })
+  }, [autoDraft, userTeamId])
+
+  // Auto-fire when it's my turn and autodraft is on
+  useEffect(() => {
+    if (!isMyTurn || !autoDraft || settings.status !== 'active') return
+    if (autoPickCalledForPick.current === settings.current_pick_number) return
+    autoPickCalledForPick.current = settings.current_pick_number
+    const t = setTimeout(() => triggerAutoPick(), 600)
+    return () => clearTimeout(t)
+  }, [isMyTurn, autoDraft, settings.status, settings.current_pick_number, triggerAutoPick])
+
   const tabs: { key: TabKey; label: string; icon: React.ElementType; badge?: number }[] = [
     { key: 'athletes', label: 'Athletes', icon: Users },
     { key: 'grid', label: 'Grid', icon: LayoutGrid },
@@ -241,6 +281,7 @@ export function DraftRoom({
               <PickTimerCountdown
                 remainingSeconds={remainingSecs}
                 totalSeconds={settings.pick_timer_seconds}
+                onExpire={handleTimerExpire}
               />
             )}
             <div className="flex-1 min-w-0">
@@ -291,6 +332,23 @@ export function DraftRoom({
             <Trophy className="w-4 h-4" />
             Draft Complete! All 100 picks have been made.
           </div>
+        )}
+
+        {/* Autodraft toggle — only for team managers with a team */}
+        {userTeamId && settings.status === 'active' && (
+          <button
+            onClick={handleToggleAutoDraft}
+            title={autoDraft ? 'Autodraft is ON — click to disable' : 'Enable autodraft: system will pick for you automatically'}
+            className={cn(
+              'flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-semibold transition-colors shrink-0',
+              autoDraft
+                ? 'bg-blue-950/60 border-blue-700 text-blue-300 hover:bg-blue-900/60'
+                : 'bg-gray-800/60 border-gray-700 text-gray-400 hover:text-gray-200'
+            )}
+          >
+            <span className={cn('w-2 h-2 rounded-full shrink-0', autoDraft ? 'bg-blue-400' : 'bg-gray-600')} />
+            {autoDraft ? '🤖 Auto ON' : '🤖 Auto'}
+          </button>
         )}
 
         {/* My roster summary */}

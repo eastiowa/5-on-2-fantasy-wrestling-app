@@ -1,28 +1,38 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 interface PickTimerCountdownProps {
   remainingSeconds: number | null
   totalSeconds: number
+  onExpire?: () => void
 }
 
-export function PickTimerCountdown({ remainingSeconds, totalSeconds }: PickTimerCountdownProps) {
+export function PickTimerCountdown({ remainingSeconds, totalSeconds, onExpire }: PickTimerCountdownProps) {
   const [display, setDisplay] = useState(remainingSeconds)
+  const expiredRef = useRef(false)
 
   useEffect(() => {
     if (remainingSeconds === null) return
     setDisplay(remainingSeconds)
+    expiredRef.current = false
 
     const interval = setInterval(() => {
       setDisplay((prev) => {
-        if (prev === null || prev <= 0) { clearInterval(interval); return 0 }
+        if (prev === null || prev <= 0) {
+          clearInterval(interval)
+          if (!expiredRef.current) {
+            expiredRef.current = true
+            onExpire?.()
+          }
+          return 0
+        }
         return prev - 1
       })
     }, 1000)
     return () => clearInterval(interval)
-  }, [remainingSeconds])
+  }, [remainingSeconds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (display === null) return null
 

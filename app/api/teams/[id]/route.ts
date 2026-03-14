@@ -48,8 +48,8 @@ export async function PATCH(
 
   const body = await req.json()
 
-  // Managers may only change the name; commissioner can also change manager_id
-  const allowed = isCommissioner ? ['name', 'manager_id'] : ['name']
+  // Managers may change name and auto_draft; commissioner can also change manager_id
+  const allowed = isCommissioner ? ['name', 'manager_id', 'auto_draft'] : ['name', 'auto_draft']
   const update = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)))
 
   if (Object.keys(update).length === 0) {

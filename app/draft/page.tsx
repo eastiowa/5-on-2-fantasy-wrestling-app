@@ -25,7 +25,7 @@ export default async function DraftPage() {
     { data: currentSeason },
   ] = await Promise.all([
     supabase.from('draft_settings').select('*').maybeSingle(),
-    supabase.from('teams').select('id, name, manager_id').order('name', { ascending: true }),
+    supabase.from('teams').select('id, name, manager_id, auto_draft').order('name', { ascending: true }),
     supabase.from('athletes').select('*').order('weight').order('seed'),
     supabase.from('draft_picks').select('*, athlete:athletes(id, name, weight, seed, school)').order('pick_number'),
     supabase.from('draft_chat_messages').select('*').order('created_at', { ascending: true }).limit(200),
