@@ -40,10 +40,17 @@ async function getStandings() {
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
 
-  // Get team projections (only populated during an active season)
-  const { data: projectionRows } = await supabase
-    .from('team_projections')
-    .select('team_id, projected_total, win_probability, last_computed_at')
+  // Get current season to scope projections correctly
+  const { data: currentSeasonForProj } = await supabase
+    .from('seasons').select('id').eq('is_current', true).maybeSingle()
+
+  // Get team projections for the current season only
+  const { data: projectionRows } = currentSeasonForProj
+    ? await supabase
+        .from('team_projections')
+        .select('team_id, projected_total, win_probability, last_computed_at')
+        .eq('season_id', currentSeasonForProj.id)
+    : { data: null }
 
   // Index projections by team_id for quick lookup
   const projectionByTeam = new Map<string, { projected_total: number; win_probability: number; last_computed_at: string }>(
@@ -272,7 +279,8 @@ export default async function HomePage() {
             ) : (
               <div className="divide-y divide-gray-800">
                 {standings.map(({ team, total_points, athletes_drafted, rank, projected_total, win_probability }) => {
-                  const hasProjections = projected_total !== null && currentSeason?.status === 'active'
+                  // Show projections whenever the model has computed them (not gated by season status)
+                  const hasProjections = projected_total !== null
                   return (
                     <Link
                       key={team.id}
@@ -302,30 +310,30 @@ export default async function HomePage() {
                         </div>
                       </div>
 
-                      {/* Projected total (active season only) */}
-                      {hasProjections && (
-                        <div className="text-right shrink-0 hidden sm:block">
-                          <div className="text-sm font-semibold text-blue-400">
-                            {formatPoints(projected_total!)}
-                          </div>
-                          <div className="text-xs text-gray-600">projected</div>
-                        </div>
-                      )}
-
-                      {/* Win probability (active season only) */}
+                      {/* Win probability — visible on sm+ */}
                       {hasProjections && win_probability !== null && (
-                        <div className="shrink-0 hidden sm:block">
+                        <div className="shrink-0 hidden sm:flex flex-col items-end gap-0.5">
                           <WinProbabilityBadge probability={win_probability} />
-                          <div className="text-xs text-gray-600 text-right mt-0.5">win prob</div>
+                          <div className="text-xs text-gray-600">win prob</div>
                         </div>
                       )}
 
-                      {/* Actual points */}
+                      {/* Points column: actual (large) + projected (small, inline below) */}
                       <div className="text-right shrink-0">
-                        <div className="text-xl font-bold text-yellow-400">
+                        <div className="text-xl font-bold text-yellow-400 leading-tight">
                           {formatPoints(total_points)}
                         </div>
-                        <div className="text-xs text-gray-500">points</div>
+                        {hasProjections ? (
+                          <div className="flex items-center justify-end gap-1 mt-0.5">
+                            <TrendingUp className="w-3 h-3 text-blue-400 shrink-0" />
+                            <span className="text-xs font-semibold text-blue-400">
+                              {formatPoints(projected_total!)}
+                            </span>
+                            <span className="text-xs text-gray-600">proj</span>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-500">points</div>
+                        )}
                       </div>
                     </Link>
                   )
