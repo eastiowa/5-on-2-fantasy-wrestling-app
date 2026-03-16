@@ -116,7 +116,16 @@ async function getStandings() {
         win_probability: liveWinProb,
       }
     })
-    .sort((a, b) => b.total_points - a.total_points)
+    .sort((a, b) => {
+      // If actual points are all zero (pre-tournament), sort by projected total
+      // so the model-derived standings are meaningful from day one.
+      // Once any team has actual points, sort by actual total (current leaderboard).
+      const anyActualPoints = (teams ?? []).some(t => (teamTotals[t.id] ?? 0) > 0)
+      if (!anyActualPoints && a.projected_total !== null && b.projected_total !== null) {
+        return b.projected_total - a.projected_total
+      }
+      return b.total_points - a.total_points
+    })
     .map((entry, i) => ({ ...entry, rank: i + 1 }))
 
   return {
