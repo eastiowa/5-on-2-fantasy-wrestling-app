@@ -40,46 +40,80 @@ async function getStandings() {
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
 
-  // Get current season to scope projections correctly
+  // Get current season to scope model data
   const { data: currentSeasonForProj } = await supabase
     .from('seasons').select('id').eq('is_current', true).maybeSingle()
 
-  // Get team projections for the current season only
-  const { data: projectionRows } = currentSeasonForProj
-    ? await supabase
-        .from('team_projections')
-        .select('team_id, projected_total, win_probability, last_computed_at')
+  // ── Source 1: pre-tournament model data (athlete_model_data, migration 016) ──
+  // Keyed by athlete_id → mc_expected_points (the full-tournament expected value).
+  // This table is populated as soon as the commissioner uploads the simulation CSV.
+  const { data: modelRows } = currentSeasonForProj
+    ? await (supabase as any)
+        .from('athlete_model_data')
+        .select('athlete_id, mc_expected_points')
         .eq('season_id', currentSeasonForProj.id)
+        .not('athlete_id', 'is', null) as { data: { athlete_id: string; mc_expected_points: number }[] | null }
     : { data: null }
 
-  // Index projections by team_id for quick lookup
-  const projectionByTeam = new Map<string, { projected_total: number; win_probability: number; last_computed_at: string }>(
-    (projectionRows ?? []).map(p => [p.team_id, p])
+  const modelByAthleteId = new Map<string, number>(
+    (modelRows ?? []).map(r => [r.athlete_id, r.mc_expected_points])
   )
 
-  // Calculate team totals
+  // ── Source 2: live team_projections (migration 014, populated by recalculate) ─
+  // Used when available — includes tournament-state-aware conditional projections.
+  const { data: teamProjRows } = currentSeasonForProj
+    ? await (supabase as any)
+        .from('team_projections')
+        .select('team_id, projected_total, win_probability')
+        .eq('season_id', currentSeasonForProj.id) as {
+          data: { team_id: string; projected_total: number; win_probability: number }[] | null
+        }
+    : { data: null }
+
+  const teamProjByTeam = new Map<string, { projected_total: number; win_probability: number }>(
+    (teamProjRows ?? []).map(r => [r.team_id, r])
+  )
+
+  // Calculate team totals + on-the-fly projected totals from model data
   const teamTotals: Record<string, number> = {}
+  const teamProjected: Record<string, number> = {}
   const teamAthleteCount: Record<string, number> = {}
 
   picks?.forEach((pick) => {
-    const athletePoints = (pick.athlete as any)?.scores?.reduce(
+    const athleteId = (pick.athlete as any)?.id as string | undefined
+    const actualPoints: number = (pick.athlete as any)?.scores?.reduce(
       (sum: number, s: any) => sum + (s.total_points ?? 0),
       0
     ) ?? 0
-    teamTotals[pick.team_id] = (teamTotals[pick.team_id] ?? 0) + athletePoints
+    teamTotals[pick.team_id] = (teamTotals[pick.team_id] ?? 0) + actualPoints
     teamAthleteCount[pick.team_id] = (teamAthleteCount[pick.team_id] ?? 0) + 1
+
+    // Projected = max(actual earned so far, pre-tournament model expectation)
+    // Pre-tournament: actual=0, model=16.4  → projected=16.4
+    // During tourney: actual=10, model=16.4 → projected=16.4 (model still ahead)
+    // Outperforming:  actual=20, model=16.4 → projected=20  (actual wins)
+    if (athleteId && modelByAthleteId.has(athleteId)) {
+      const modelPts = modelByAthleteId.get(athleteId)!
+      teamProjected[pick.team_id] = (teamProjected[pick.team_id] ?? 0) + Math.max(actualPoints, modelPts)
+    }
   })
 
   // Sort by total points descending
   const standings = (teams ?? [])
     .map((team) => {
-      const proj = projectionByTeam.get(team.id)
+      // Prefer live team_projections when available; fall back to on-the-fly model calc
+      const liveProjTotal = teamProjByTeam.get(team.id)?.projected_total ?? null
+      const liveWinProb   = teamProjByTeam.get(team.id)?.win_probability ?? null
+      const modelProjTotal = teamProjected[team.id] != null
+        ? parseFloat(teamProjected[team.id].toFixed(1))
+        : null
+
       return {
         team: team as Team & { manager: { display_name: string | null; email: string } },
         total_points: teamTotals[team.id] ?? 0,
         athletes_drafted: teamAthleteCount[team.id] ?? 0,
-        projected_total: proj?.projected_total ?? null,
-        win_probability: proj?.win_probability ?? null,
+        projected_total: liveProjTotal ?? modelProjTotal,
+        win_probability: liveWinProb,
       }
     })
     .sort((a, b) => b.total_points - a.total_points)

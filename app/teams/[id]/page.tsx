@@ -47,36 +47,66 @@ export default async function TeamPage({ params }: PageProps) {
 
   const teamTotal = athletes.reduce((sum, a) => sum + (a.total_points ?? 0), 0)
 
-  // Fetch current season to know if projections should be shown
+  // Fetch current season
   const { data: currentSeason } = await supabase
     .from('seasons')
     .select('id, status')
     .eq('is_current', true)
     .maybeSingle()
 
-  const showProjections = currentSeason?.status === 'active'
-
-  // Fetch athlete projections for this team's athletes (only during active season)
+  // Always show projections when model data exists — not gated by season status
   const athleteIds = athletes.map((a: any) => a.id).filter(Boolean)
-  const { data: projRows } = showProjections && athleteIds.length > 0
-    ? await supabase
+
+  // ── Source 1: athlete_model_data (migration 016, populated after CSV upload) ─
+  // mc_expected_points is the pre-tournament model expected total per athlete.
+  const { data: modelRows } = currentSeason && athleteIds.length > 0
+    ? await (supabase as any)
+        .from('athlete_model_data')
+        .select('athlete_id, mc_expected_points, mc_p1, mc_p2, mc_p3, mc_p4, mc_p5, mc_p6, mc_p7, mc_p8')
+        .eq('season_id', currentSeason.id)
+        .in('athlete_id', athleteIds)
+        .not('athlete_id', 'is', null) as { data: any[] | null }
+    : { data: null }
+
+  const modelByAthlete = new Map<string, { mc_expected_points: number }>(
+    (modelRows ?? []).map((r: any) => [r.athlete_id as string, r])
+  )
+
+  // ── Source 2: live athlete_projections (migration 014, updated each scrape) ──
+  const { data: projRows } = currentSeason && athleteIds.length > 0
+    ? await (supabase as any)
         .from('athlete_projections')
         .select('athlete_id, expected_points_remaining, projected_total, bracket_status')
-        .in('athlete_id', athleteIds)
+        .in('athlete_id', athleteIds) as { data: any[] | null }
     : { data: null }
 
   const projByAthlete = new Map<string, { expected_points_remaining: number; projected_total: number; bracket_status: string }>(
-    (projRows ?? []).map(p => [p.athlete_id, p])
+    (projRows ?? []).map((p: any) => [p.athlete_id, p])
   )
 
-  // Fetch team projection (win probability)
-  const { data: teamProj } = showProjections
-    ? await supabase
+  const showProjections = modelByAthlete.size > 0 || projByAthlete.size > 0
+
+  // ── Source 2: live team_projections (migration 014) ──────────────────────────
+  const { data: teamProjLive } = currentSeason
+    ? await (supabase as any)
         .from('team_projections')
         .select('projected_total, win_probability')
+        .eq('season_id', currentSeason.id)
         .eq('team_id', id)
-        .maybeSingle()
+        .maybeSingle() as { data: { projected_total: number; win_probability: number } | null }
     : { data: null }
+
+  // Compute on-the-fly team projected total from model data if live isn't available
+  const modelTeamProjected = showProjections
+    ? athletes.reduce((sum: number, a: any) => {
+        const model = modelByAthlete.get(a.id)
+        if (!model) return sum
+        return sum + Math.max(a.total_points ?? 0, model.mc_expected_points)
+      }, 0)
+    : null
+
+  const teamProj = teamProjLive
+    ?? (modelTeamProjected !== null ? { projected_total: parseFloat(modelTeamProjected.toFixed(1)), win_probability: null } : null)
 
   // Build weight class grid
   const weightMap = Object.fromEntries(athletes.map((a) => [a.weight, a]))
@@ -108,10 +138,12 @@ export default async function TeamPage({ params }: PageProps) {
                   </div>
                   <div className="text-xs text-gray-500">projected</div>
                 </div>
-                <div>
-                  <WinProbabilityBadge probability={teamProj.win_probability} />
-                  <div className="text-xs text-gray-600 text-right mt-0.5">win prob</div>
-                </div>
+                {teamProj.win_probability !== null && (
+                  <div>
+                    <WinProbabilityBadge probability={teamProj.win_probability} />
+                    <div className="text-xs text-gray-600 text-right mt-0.5">win prob</div>
+                  </div>
+                )}
               </div>
             )}
             <div className="text-right">
@@ -173,18 +205,37 @@ export default async function TeamPage({ params }: PageProps) {
                         )
                       })()}
                     </div>
-                    {/* Expected remaining points (active season only) */}
+                    {/* Expected / projected points per athlete */}
                     {showProjections && (() => {
-                      const proj = projByAthlete.get(athlete.id)
-                      if (!proj || proj.bracket_status === 'eliminated' || proj.bracket_status === 'placed') return null
-                      return (
-                        <div className="text-right shrink-0 mr-2 hidden sm:block">
-                          <div className="text-sm font-semibold text-blue-400">
-                            +{formatPoints(proj.expected_points_remaining)}
+                      const liveProj = projByAthlete.get(athlete.id)
+                      const model    = modelByAthlete.get(athlete.id)
+
+                      // Prefer live projection (from recalculate route), fall back to model
+                      if (liveProj) {
+                        if (liveProj.bracket_status === 'eliminated' || liveProj.bracket_status === 'placed') return null
+                        return (
+                          <div className="text-right shrink-0 mr-2">
+                            <div className="text-sm font-semibold text-blue-400">
+                              +{formatPoints(liveProj.expected_points_remaining)}
+                            </div>
+                            <div className="text-xs text-gray-600">expected</div>
                           </div>
-                          <div className="text-xs text-gray-600">expected</div>
-                        </div>
-                      )
+                        )
+                      }
+
+                      if (model) {
+                        const projTotal = Math.max(athlete.total_points ?? 0, model.mc_expected_points)
+                        return (
+                          <div className="text-right shrink-0 mr-2">
+                            <div className="text-sm font-semibold text-blue-400">
+                              {formatPoints(projTotal)}
+                            </div>
+                            <div className="text-xs text-gray-600">projected</div>
+                          </div>
+                        )
+                      }
+
+                      return null
                     })()}
                     <div className="text-right shrink-0">
                       <div className="font-bold text-yellow-400">{formatPoints(athlete.total_points)}</div>
