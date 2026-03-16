@@ -133,6 +133,29 @@ export default async function DashboardPage() {
   const myAthletes = buildAthletes(picksByTeam[profile.team_id] ?? [])
   const teamTotal = myAthletes.reduce((sum, a) => sum + (a.total_points ?? 0), 0)
 
+  // ── Model projections (athlete_model_data, migration 016) ────────────────────
+  const myAthleteIds = myAthletes.map((a: any) => a.id).filter(Boolean)
+  const { data: modelRows } = currentSeason && myAthleteIds.length > 0
+    ? await (supabase as any)
+        .from('athlete_model_data')
+        .select('athlete_id, mc_expected_points')
+        .eq('season_id', currentSeason.id)
+        .in('athlete_id', myAthleteIds)
+        .not('athlete_id', 'is', null) as { data: { athlete_id: string; mc_expected_points: number }[] | null }
+    : { data: null }
+
+  const modelByAthleteId = new Map<string, number>(
+    (modelRows ?? []).map(r => [r.athlete_id, r.mc_expected_points])
+  )
+
+  // projected total = sum of max(actual, mc_expected_points) per athlete
+  const projectedTotal = modelByAthleteId.size > 0
+    ? parseFloat(myAthletes.reduce((sum: number, a: any) => {
+        const model = modelByAthleteId.get(a.id) ?? null
+        return sum + (model !== null ? Math.max(a.total_points ?? 0, model) : (a.total_points ?? 0))
+      }, 0).toFixed(1))
+    : null
+
   // ── All teams (for standings + other teams section) ─────────────────────────
   const { data: allTeams } = await supabase
     .from('teams')
@@ -201,7 +224,7 @@ export default async function DashboardPage() {
         <div className="lg:col-span-2 space-y-6">
 
           {/* Stats cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5">
               <div className="flex items-center gap-3">
                 <Trophy className="w-7 h-7 text-yellow-400 shrink-0" />
@@ -220,6 +243,18 @@ export default async function DashboardPage() {
                 </div>
               </div>
             </div>
+            {/* Projected Points — shown when model data is available */}
+            {projectedTotal !== null && (
+              <div className="bg-gray-900 rounded-xl border border-blue-500/30 p-5">
+                <div className="flex items-center gap-3">
+                  <TrendingUp className="w-7 h-7 text-blue-400 shrink-0" />
+                  <div>
+                    <div className="text-2xl font-bold text-blue-400">{formatPoints(projectedTotal)}</div>
+                    <div className="text-xs text-gray-400">Projected Pts</div>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-5">
               <div className="flex items-center gap-3">
                 <Users className="w-7 h-7 text-yellow-400 shrink-0" />
