@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   BarChart3, Upload, Link2, AlertCircle, CheckCircle,
-  Loader2, Download, Zap, ToggleLeft, ToggleRight, RefreshCw, Clock,
+  Loader2, Download, Zap, ToggleLeft, ToggleRight, RefreshCw, Clock, BrainCircuit,
 } from 'lucide-react'
 import { generateScoreCSVTemplate } from '@/lib/scoring'
 import { createClient } from '@/lib/supabase/client'
@@ -39,6 +39,12 @@ export default function ScoresPage() {
   const [savingUrl, setSavingUrl] = useState(false)
   const [togglingAuto, setTogglingAuto] = useState(false)
   const [scraping, setScraping] = useState(false)
+
+  // Model data upload state
+  const modelFileRef = useRef<HTMLInputElement>(null)
+  const [modelUploading, setModelUploading] = useState(false)
+  const [modelResult, setModelResult] = useState<any>(null)
+  const [modelError, setModelError] = useState<string | null>(null)
 
   // Shared result / error
   const [result, setResult] = useState<any>(null)
@@ -172,6 +178,28 @@ export default function ScoresPage() {
     if (!res.ok) setError(data.error ?? 'Scrape failed')
     else setResult(data)
     await loadScrapeSettings()
+  }
+
+  // ── Model data CSV upload ──────────────────────────────────────────────────
+  async function handleModelUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setModelUploading(true)
+    setModelError(null)
+    setModelResult(null)
+    const form = new FormData()
+    form.append('file', file)
+    try {
+      const res = await fetch('/api/projections/upload-model', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) setModelError(data.error ?? 'Upload failed')
+      else setModelResult(data)
+    } catch {
+      setModelError('Network error — try again.')
+    }
+    setModelUploading(false)
+    // reset input so the same file can be re-uploaded
+    if (modelFileRef.current) modelFileRef.current.value = ''
   }
 
   // ── Shared result banner ───────────────────────────────────────────────────
@@ -403,6 +431,73 @@ export default function ScoresPage() {
           className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
         >
           {syncing ? <><Loader2 className="w-4 h-4 animate-spin" />Syncing…</> : 'Sync Now'}
+        </button>
+      </div>
+
+      {/* ── Prediction Model Upload ──────────────────────────────────────────── */}
+      <div className="bg-gray-900 rounded-xl border border-blue-500/30 p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="font-semibold text-white flex items-center gap-2">
+              <BrainCircuit className="w-4 h-4 text-blue-400" />
+              Prediction Model Data
+            </h3>
+            <p className="text-sm text-gray-400 mt-1">
+              Upload the pre-tournament Monte Carlo simulation CSV
+              (<span className="font-mono text-xs text-gray-300">mc_full_results_2026.csv</span> format)
+              to seed per-athlete placement probabilities and win-probability projections.
+              Expected columns: <span className="font-mono text-xs text-gray-300">
+                name, weight, seed, ws_elo, mc_p1–mc_p8, mc_expected_points, bonus_rate
+              </span>.
+            </p>
+          </div>
+        </div>
+
+        {/* Result */}
+        {modelResult && (
+          <div className="p-3 bg-blue-950 border border-blue-800 rounded-lg text-blue-300 space-y-1 text-sm">
+            <div className="flex items-center gap-2 font-medium">
+              <CheckCircle className="w-4 h-4" />
+              Model data uploaded — {modelResult.inserted} athletes processed
+            </div>
+            <div>✓ Matched to roster: {modelResult.matched}</div>
+            {modelResult.unmatched?.length > 0 && (
+              <div className="text-yellow-400">
+                ⚠️ Unmatched ({modelResult.unmatched.length}): {modelResult.unmatched.slice(0, 8).join(', ')}
+                {modelResult.unmatched.length > 8 && ` +${modelResult.unmatched.length - 8} more`}
+              </div>
+            )}
+            {modelResult.db_errors?.length > 0 && (
+              <div className="text-red-400 text-xs">
+                DB errors: {modelResult.db_errors.join('; ')}
+              </div>
+            )}
+          </div>
+        )}
+        {modelError && (
+          <div className="flex items-center gap-2 p-3 bg-red-950 border border-red-800 rounded-lg text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            {modelError}
+          </div>
+        )}
+
+        {/* Upload button */}
+        <input
+          ref={modelFileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={handleModelUpload}
+        />
+        <button
+          onClick={() => modelFileRef.current?.click()}
+          disabled={modelUploading}
+          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors text-sm"
+        >
+          {modelUploading
+            ? <><Loader2 className="w-4 h-4 animate-spin" />Uploading…</>
+            : <><Upload className="w-4 h-4" />Upload Simulation CSV</>
+          }
         </button>
       </div>
 

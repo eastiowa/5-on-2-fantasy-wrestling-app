@@ -27,6 +27,10 @@ export interface TWAthleteScore {
   bonus_points: number       // sum of per-win bonus (fall=2, tf=1.5, md=1, dec=0)
   placement: number | null   // 1–8, or null if not placed / tournament in progress
   placement_points: number   // PLACEMENT_POINTS[placement] or 0
+  // ── Bracket-position fields (used by prediction model) ─────────────────────
+  bracket_status: 'championship' | 'consolation' | 'placed' | 'eliminated' | 'unknown'
+  // championship_wins and consolation_wins double as the round depth,
+  // but bracket_status indicates which bracket the athlete is currently in.
 }
 
 export interface TWFetchResult {
@@ -188,6 +192,7 @@ function parseBracket(
         bonus_points: 0,
         placement: null,
         placement_points: 0,
+        bracket_status: 'unknown',
       })
     }
     return scoreMap.get(name)!
@@ -232,6 +237,50 @@ function parseBracket(
           loserScore.placement_points = PLACEMENT_POINTS[loserPlace] ?? 0
         }
       }
+    }
+  }
+
+  // ── Derive bracket_status for prediction model ──────────────────────────────
+  //
+  // We infer each athlete's current bracket position by tracking which bouts
+  // they appear in as a loser. If they lost a championship bout and never
+  // appeared as a consolation loser, they are still alive in consolation.
+  // If they lost a consolation bout they are eliminated. If their placement
+  // is set, they are done.
+  //
+  // Build loss-tracking sets from all completed bouts.
+  const lostInChamp    = new Set<string>()
+  const lostInConsol   = new Set<string>()
+  const lostInPlacement = new Set<string>()
+
+  for (const bout of bouts) {
+    if (!bout.completed || !bout.loser) continue
+    const loserName = normaliseName(bout.loser)
+    if (!loserName) continue
+
+    if (isPlacementBout(bout)) {
+      lostInPlacement.add(loserName)
+    } else if (isChampionshipBout(bout)) {
+      lostInChamp.add(loserName)
+    } else if (isConsolationBout(bout)) {
+      lostInConsol.add(loserName)
+    }
+  }
+
+  for (const [name, score] of scoreMap) {
+    if (score.placement !== null) {
+      // Placement is fully set — tournament is over for this athlete
+      score.bracket_status = 'placed'
+    } else if (lostInConsol.has(name)) {
+      // Lost a consolation bout and placement not yet assigned → eliminated
+      score.bracket_status = 'eliminated'
+    } else if (lostInChamp.has(name)) {
+      // Lost a championship bout but still active in consolation
+      score.bracket_status = 'consolation'
+    } else {
+      // Never appeared as a loser in any completed bout → still in championship
+      // (or hasn't wrestled yet, which is treated the same for projection purposes)
+      score.bracket_status = 'championship'
     }
   }
 

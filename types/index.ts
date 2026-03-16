@@ -194,6 +194,53 @@ export interface SeasonStanding {
   total_points: number
 }
 
+// ============================================================
+// PROJECTIONS
+// Recomputed after every Trackwrestling score sync.
+// ============================================================
+
+/** Bracket position as derived by the Trackwrestling scraper. */
+export type BracketStatus =
+  | 'championship' // still alive in championship bracket
+  | 'consolation'  // lost once, alive in consolation
+  | 'placed'       // tournament finished; placement is set
+  | 'eliminated'   // lost in consolation without placing
+  | 'unknown'      // before first scrape
+
+/** Per-athlete projection row — one per athlete per season. */
+export interface AthleteProjection {
+  id: string
+  season_id: string
+  athlete_id: string
+  bracket_status: BracketStatus
+  championship_round: number         // championship wins so far
+  consolation_round: number          // consolation wins so far
+  expected_points_remaining: number  // model output
+  projected_total: number            // current_points + expected_points_remaining
+  last_computed_at: string
+  // joined
+  athlete?: Athlete
+}
+
+/** Per-team projection row — one per team per season. */
+export interface TeamProjection {
+  id: string
+  season_id: string
+  team_id: string
+  projected_total: number    // sum of athlete projected_totals
+  win_probability: number    // 0.0–1.0 from Monte Carlo simulation
+  last_computed_at: string
+  // joined
+  team?: Team
+}
+
+/** Seed power rating used by the Bradley-Terry prediction model. */
+export interface SeedPowerRating {
+  seed: number
+  power_rating: number
+  updated_at: string
+}
+
 // Snake draft helper type
 export interface CurrentPickInfo {
   pick_number: number

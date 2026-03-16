@@ -174,6 +174,7 @@ export async function POST(req: Request) {
       bonus_points: row.bonus_points,
       placement: row.placement ?? null,
       placement_points: row.placement_points,
+      bracket_status: row.bracket_status,
       updated_at: new Date().toISOString(),
     })
 
@@ -198,6 +199,26 @@ export async function POST(req: Request) {
       updated_at: new Date().toISOString(),
     })
     .neq('id', '00000000-0000-0000-0000-000000000000')
+
+  // ── 6. Trigger projection recalculation (fire-and-forget) ─────────────────
+  // Runs asynchronously so it does not block the scrape response.
+  // Uses the same cron secret so the projection route trusts this call.
+  if (upserted.length > 0) {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ??
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+
+    fetch(`${baseUrl}/api/projections/recalculate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(process.env.CRON_SECRET ? { 'x-cron-secret': process.env.CRON_SECRET } : {}),
+      },
+    }).catch((err) => {
+      // Non-fatal — projections will just be stale until the next scrape
+      console.warn('[scrape-trackwrestling] projection recalculate fire-and-forget failed:', err)
+    })
+  }
 
   return NextResponse.json({
     success: true,

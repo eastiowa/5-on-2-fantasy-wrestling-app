@@ -4,6 +4,7 @@ import { Trophy, Megaphone, TrendingUp, Users, CalendarDays, User, Crown } from 
 import Link from 'next/link'
 import { Team, Announcement } from '@/types'
 import { DraftCountdown } from '@/components/shared/DraftCountdown'
+import { WinProbabilityBadge } from '@/components/shared/WinProbabilityBadge'
 
 export const revalidate = 60 // Revalidate standings every 60 seconds
 
@@ -39,6 +40,16 @@ async function getStandings() {
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
 
+  // Get team projections (only populated during an active season)
+  const { data: projectionRows } = await supabase
+    .from('team_projections')
+    .select('team_id, projected_total, win_probability, last_computed_at')
+
+  // Index projections by team_id for quick lookup
+  const projectionByTeam = new Map<string, { projected_total: number; win_probability: number; last_computed_at: string }>(
+    (projectionRows ?? []).map(p => [p.team_id, p])
+  )
+
   // Calculate team totals
   const teamTotals: Record<string, number> = {}
   const teamAthleteCount: Record<string, number> = {}
@@ -54,11 +65,16 @@ async function getStandings() {
 
   // Sort by total points descending
   const standings = (teams ?? [])
-    .map((team) => ({
-      team: team as Team & { manager: { display_name: string | null; email: string } },
-      total_points: teamTotals[team.id] ?? 0,
-      athletes_drafted: teamAthleteCount[team.id] ?? 0,
-    }))
+    .map((team) => {
+      const proj = projectionByTeam.get(team.id)
+      return {
+        team: team as Team & { manager: { display_name: string | null; email: string } },
+        total_points: teamTotals[team.id] ?? 0,
+        athletes_drafted: teamAthleteCount[team.id] ?? 0,
+        projected_total: proj?.projected_total ?? null,
+        win_probability: proj?.win_probability ?? null,
+      }
+    })
     .sort((a, b) => b.total_points - a.total_points)
     .map((entry, i) => ({ ...entry, rank: i + 1 }))
 
@@ -255,44 +271,65 @@ export default async function HomePage() {
               </div>
             ) : (
               <div className="divide-y divide-gray-800">
-                {standings.map(({ team, total_points, athletes_drafted, rank }) => (
-                  <Link
-                    key={team.id}
-                    href={`/teams/${team.id}`}
-                    className="flex items-center gap-4 px-6 py-4 hover:bg-gray-800/50 transition-colors group"
-                  >
-                    {/* Rank */}
-                    <div className={`
-                      w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0
-                      ${rank === 1 ? 'bg-yellow-400 text-gray-900' :
-                        rank === 2 ? 'bg-gray-300 text-gray-900' :
-                        rank === 3 ? 'bg-amber-600 text-white' :
-                        'bg-gray-800 text-gray-400'}
-                    `}>
-                      {rank}
-                    </div>
+                {standings.map(({ team, total_points, athletes_drafted, rank, projected_total, win_probability }) => {
+                  const hasProjections = projected_total !== null && currentSeason?.status === 'active'
+                  return (
+                    <Link
+                      key={team.id}
+                      href={`/teams/${team.id}`}
+                      className="flex items-center gap-3 px-6 py-4 hover:bg-gray-800/50 transition-colors group"
+                    >
+                      {/* Rank */}
+                      <div className={`
+                        w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0
+                        ${rank === 1 ? 'bg-yellow-400 text-gray-900' :
+                          rank === 2 ? 'bg-gray-300 text-gray-900' :
+                          rank === 3 ? 'bg-amber-600 text-white' :
+                          'bg-gray-800 text-gray-400'}
+                      `}>
+                        {rank}
+                      </div>
 
-                    {/* Team info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-white group-hover:text-yellow-400 transition-colors truncate">
-                        {team.name}
+                      {/* Team info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-white group-hover:text-yellow-400 transition-colors truncate">
+                          {team.name}
+                        </div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {team.manager?.display_name ?? team.manager?.email ?? 'No manager'}
+                          {' · '}
+                          {athletes_drafted}/10 athletes drafted
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {team.manager?.display_name ?? team.manager?.email ?? 'No manager'}
-                        {' · '}
-                        {athletes_drafted}/10 athletes drafted
-                      </div>
-                    </div>
 
-                    {/* Points */}
-                    <div className="text-right shrink-0">
-                      <div className="text-xl font-bold text-yellow-400">
-                        {formatPoints(total_points)}
+                      {/* Projected total (active season only) */}
+                      {hasProjections && (
+                        <div className="text-right shrink-0 hidden sm:block">
+                          <div className="text-sm font-semibold text-blue-400">
+                            {formatPoints(projected_total!)}
+                          </div>
+                          <div className="text-xs text-gray-600">projected</div>
+                        </div>
+                      )}
+
+                      {/* Win probability (active season only) */}
+                      {hasProjections && win_probability !== null && (
+                        <div className="shrink-0 hidden sm:block">
+                          <WinProbabilityBadge probability={win_probability} />
+                          <div className="text-xs text-gray-600 text-right mt-0.5">win prob</div>
+                        </div>
+                      )}
+
+                      {/* Actual points */}
+                      <div className="text-right shrink-0">
+                        <div className="text-xl font-bold text-yellow-400">
+                          {formatPoints(total_points)}
+                        </div>
+                        <div className="text-xs text-gray-500">points</div>
                       </div>
-                      <div className="text-xs text-gray-500">points</div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </div>
