@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { getTeamForPick, getPickMeta, selectAutoPickAthlete } from '@/lib/draft-logic'
+import { runAutoDraftChain, notifyNextTeam } from '@/lib/autopick-chain'
 import { Team, Athlete, DraftPick } from '@/types'
 import { sendSms } from '@/lib/twilio'
 
@@ -18,6 +19,10 @@ import { sendSms } from '@/lib/twilio'
  *      weight-class + seed constraints for the team).
  *   2. Best available athlete: lowest seed number (ties broken by weight class,
  *      lightest first) that passes constraints.
+ *
+ * After the pick is committed, the server automatically chains additional
+ * autopicks for any consecutive teams that also have auto_draft=true — so
+ * autodraft works even when no browser is open.
  */
 export async function POST() {
   const supabase = await createClient()
@@ -158,25 +163,41 @@ export async function POST() {
     message: `${autoLabel} — Pick #${currentPick} (R${round}): ${activeTeam.name} → ${selectedAthlete.name} (${selectedAthlete.weight} lbs, Seed #${selectedAthlete.seed}, ${selectedAthlete.school})${isDraftComplete ? ' — DRAFT COMPLETE!' : `\nOn the clock: ${nextTeam?.name}`}`,
   })
 
-  // ── 11. SMS to next team (fire-and-forget) ────────────────────────────────
-  if (!isDraftComplete && nextTeam) {
+  // ── 11. Server-side autodraft chain + SMS (fire-and-forget) ───────────────
+  // If the next team also has auto_draft=true, keep picking server-side
+  // without needing any browser client open.
+  if (!isDraftComplete) {
     ;(async () => {
       try {
-        const { data: mgr } = await admin
-          .from('teams').select('manager_id').eq('id', nextTeam.id).single()
-        if (mgr?.manager_id) {
-          const { data: mgProfile } = await admin
-            .from('profiles').select('display_name, phone, sms_opt_in').eq('id', mgr.manager_id).single()
-          if (mgProfile?.phone && mgProfile.sms_opt_in) {
-            const name = mgProfile.display_name ?? 'Manager'
-            await sendSms(
-              mgProfile.phone,
-              `🤼 ${name}, you're on the clock! ${nextTeam.name}'s pick #${nextPick} in the 5 on 2 Fantasy Wrestling Draft. https://5on2fantasywrestling.com/draft`
-            )
+        const nextTeamRow = teams.find((t) => t.id === nextTeam?.id)
+        if (nextTeamRow?.auto_draft) {
+          const chainResult = await runAutoDraftChain(
+            admin,
+            nextPick,
+            teams,
+            draftSettings.id,
+            currentSeason?.id ?? null,
+          )
+          await notifyNextTeam(admin, chainResult, nextPick)
+        } else {
+          // Next team is manual — send the regular SMS
+          if (!nextTeam) return
+          const { data: mgr } = await admin
+            .from('teams').select('manager_id').eq('id', nextTeam.id).single()
+          if (mgr?.manager_id) {
+            const { data: mgProfile } = await admin
+              .from('profiles').select('display_name, phone, sms_opt_in').eq('id', mgr.manager_id).single()
+            if (mgProfile?.phone && mgProfile.sms_opt_in) {
+              const name = mgProfile.display_name ?? 'Manager'
+              await sendSms(
+                mgProfile.phone,
+                `🤼 ${name}, you're on the clock! ${nextTeam.name}'s pick #${nextPick} in the 5 on 2 Fantasy Wrestling Draft. https://5on2fantasywrestling.com/draft`
+              )
+            }
           }
         }
       } catch (e) {
-        console.error('[autopick] SMS error:', e)
+        console.error('[autopick] post-pick notify error:', e)
       }
     })()
   }

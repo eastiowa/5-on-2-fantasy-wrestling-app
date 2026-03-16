@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Plus, Trash2, Loader2, AlertCircle, CheckCircle, User,
   Pencil, Check, X, RefreshCw, ShieldCheck, ShieldOff,
-  ListOrdered, UserCheck, UserX, ExternalLink, UserPlus,
+  ListOrdered, UserCheck, UserX, ExternalLink, UserPlus, Download,
 } from 'lucide-react'
 
 interface TeamWithManager {
@@ -505,9 +505,20 @@ export function TeamsManager({ commissionerId }: { commissionerId: string }) {
             <h3 className="font-semibold text-white">
               Teams <span className="text-gray-500 font-normal text-sm">({teams.length}/10)</span>
             </h3>
-            <button onClick={fetchAll} className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg" title="Refresh teams">
-              <RefreshCw className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <a
+                href="/api/teams/export"
+                download="teams-export.csv"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg transition-colors"
+                title="Download teams + rosters as CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Export CSV
+              </a>
+              <button onClick={fetchAll} className="p-2 text-gray-500 hover:text-gray-300 transition-colors rounded-lg" title="Refresh teams">
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           <div className="flex items-start gap-2 px-3 py-2.5 bg-gray-800/60 rounded-lg border border-orange-600/20 text-xs text-gray-400">

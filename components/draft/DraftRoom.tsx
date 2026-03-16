@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { DraftSettings, Athlete, DraftPick, ChatMessage, WishlistItem, UserRole } from '@/types'
 import { FlagValue } from '@/lib/athlete-flags'
@@ -58,7 +58,6 @@ export function DraftRoom({
 
   // ── Autodraft state ────────────────────────────────────────────────────────
   const [autoDraft, setAutoDraft] = useState<boolean>(false)
-  const autoPickCalledForPick = useRef<number | null>(null)
 
   // Load auto_draft from server (gracefully handles column not existing yet)
   useEffect(() => {
@@ -304,14 +303,9 @@ export function DraftRoom({
     })
   }, [autoDraft, userTeamId])
 
-  // Auto-fire when it's my turn and autodraft is on
-  useEffect(() => {
-    if (!isMyTurn || !autoDraft || settings.status !== 'active') return
-    if (autoPickCalledForPick.current === settings.current_pick_number) return
-    autoPickCalledForPick.current = settings.current_pick_number
-    const t = setTimeout(() => triggerAutoPick(), 600)
-    return () => clearTimeout(t)
-  }, [isMyTurn, autoDraft, settings.status, settings.current_pick_number, triggerAutoPick])
+  // NOTE: Autodraft is now handled entirely server-side via runAutoDraftChain.
+  // The server chains picks automatically when auto_draft=true, so no
+  // client-side trigger is needed here.
 
   const tabs: { key: TabKey; label: string; icon: React.ElementType; badge?: number }[] = [
     { key: 'athletes', label: 'Athletes', icon: Users },

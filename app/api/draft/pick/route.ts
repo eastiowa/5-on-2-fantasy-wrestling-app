@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTeamForPick, getPickMeta, validatePick } from '@/lib/draft-logic'
+import { runAutoDraftChain, notifyNextTeam } from '@/lib/autopick-chain'
 import { Team, Athlete, DraftPick } from '@/types'
 import { sendSms } from '@/lib/twilio'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -147,35 +148,43 @@ export async function POST(req: NextRequest) {
     message: `Pick #${currentPick} (${round === 1 ? 'R1' : `R${round}`}): ${activeTeam.name} selected ${athlete.name} (${athlete.weight} lbs, Seed #${athlete.seed}, ${athlete.school})${isDraftComplete ? ' — DRAFT COMPLETE!' : `\nOn the clock: ${nextTeam?.name}`}`,
   })
 
-  // ── SMS notification to the next team's manager (fire-and-forget) ─────────
-  if (!isDraftComplete && nextTeam) {
-    // Non-blocking — don't await, don't let SMS failure break the pick response
+  // ── Server-side autodraft chain + SMS (fire-and-forget) ───────────────────
+  // If the next team has auto_draft=true, pick for them immediately on the
+  // server — no browser required. Then notify whoever ends up on the clock.
+  if (!isDraftComplete) {
     ;(async () => {
       try {
-        const { data: mgr } = await admin
-          .from('teams')
-          .select('manager_id')
-          .eq('id', nextTeam.id)
-          .single()
-
-        if (mgr?.manager_id) {
-          const { data: profile } = await admin
-            .from('profiles')
-            .select('display_name, phone, sms_opt_in')
-            .eq('id', mgr.manager_id)
-            .single()
-
-          if (profile?.phone && profile.sms_opt_in) {
-            const name = profile.display_name ?? 'Manager'
-            const msg =
-              `🤼 ${name}, you're on the clock! ` +
-              `${nextTeam.name}'s pick #${nextPick} in the 5 on 2 Fantasy Wrestling Draft. ` +
-              `https://5on2fantasywrestling.com/draft`
-            await sendSms(profile.phone, msg)
+        const nextTeamRow = teams.find((t) => t.id === nextTeam?.id)
+        if (nextTeamRow?.auto_draft) {
+          // Chain picks for all consecutive autodraft teams
+          const chainResult = await runAutoDraftChain(
+            admin,
+            nextPick,
+            teams,
+            draftSettings.id,
+            currentSeason?.id ?? null,
+          )
+          // SMS whoever is now on the clock (skips autodraft teams)
+          await notifyNextTeam(admin, chainResult, nextPick)
+        } else {
+          // Next team is manual — just send the regular SMS
+          if (!nextTeam) return
+          const { data: mgr } = await admin
+            .from('teams').select('manager_id').eq('id', nextTeam.id).single()
+          if (mgr?.manager_id) {
+            const { data: mgProfile } = await admin
+              .from('profiles').select('display_name, phone, sms_opt_in').eq('id', mgr.manager_id).single()
+            if (mgProfile?.phone && mgProfile.sms_opt_in) {
+              const name = mgProfile.display_name ?? 'Manager'
+              await sendSms(
+                mgProfile.phone,
+                `🤼 ${name}, you're on the clock! ${nextTeam.name}'s pick #${nextPick} in the 5 on 2 Fantasy Wrestling Draft. https://5on2fantasywrestling.com/draft`
+              )
+            }
           }
         }
       } catch (smsErr) {
-        console.error('[draft/pick] SMS notify error:', smsErr)
+        console.error('[draft/pick] post-pick notify error:', smsErr)
       }
     })()
   }
