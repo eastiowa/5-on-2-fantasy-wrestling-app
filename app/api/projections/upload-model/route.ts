@@ -50,6 +50,11 @@ interface ModelCsvRow {
   p4p_rank?: string
   record?: string
   win_pct?: string
+  // Calibrated model output (fantasy_wrestling_calibrated_model.csv)
+  calibrated_points?: string          // PRIMARY expected pts — use this when present
+  record_confidence?: string
+  bonus_emphasis_multiplier?: string
+  expected_bonus_per_win?: string
 
   // ── Skill / rating fields ─────────────────────────────────────────────────
   elo?: string          // final format uses "elo" (was "ws_elo" in v1)
@@ -236,10 +241,13 @@ export async function POST(req: Request) {
     }
 
     // ── Resolve expected total points ─────────────────────────────────────────
-    // New format: ncaa_expected_team_points  (primary)
-    //             ncaa_expected_team_points_timed (timed variant, nearly identical)
-    // Old format: mc_expected_points
+    // Priority order (highest to lowest accuracy):
+    //   1. calibrated_points   — calibrated model output (fantasy_wrestling_calibrated_model.csv)
+    //   2. ncaa_expected_team_points        — v2 raw MC non-timed total
+    //   3. ncaa_expected_team_points_timed  — v2/v3 raw MC timed total
+    //   4. mc_expected_points               — v1 legacy field
     const mcExpected =
+      safeFloat(row.calibrated_points) ??
       safeFloat(row.ncaa_expected_team_points) ??
       safeFloat(row.ncaa_expected_team_points_timed) ??
       safeFloat(row.mc_expected_points) ??
@@ -306,6 +314,12 @@ export async function POST(req: Request) {
       prob_secures_top4:
         safeFloat((row as any).prob_secures_top4_via_wbsf) ??
         safeFloat(row.prob_secures_top4_via_wb_sf),
+
+      // ── Calibrated model fields (migration 018) ──────────────────────────
+      calibrated_points:         safeFloat(row.calibrated_points),
+      record_confidence:         safeFloat(row.record_confidence),
+      bonus_emphasis_multiplier: safeFloat(row.bonus_emphasis_multiplier),
+      expected_bonus_per_win:    safeFloat(row.expected_bonus_per_win),
 
       uploaded_at: new Date().toISOString(),
     })
