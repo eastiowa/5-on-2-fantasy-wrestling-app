@@ -168,8 +168,12 @@ export async function POST(req: Request) {
   const { data: modelRows } = await (admin as any)
     .from('athlete_model_data')
     .select(
-      'athlete_id, mc_p1, mc_p2, mc_p3, mc_p4, mc_p5, mc_p6, mc_p7, mc_p8,' +
-      'mc_top8, mc_expected_points, ws_elo, bonus_rate',
+      'athlete_id,' +
+      'mc_p1,mc_p2,mc_p3,mc_p4,mc_p5,mc_p6,mc_p7,mc_p8,mc_top8,mc_expected_points,' +
+      'ws_elo,bonus_rate,' +
+      'exp_pts_qf_win,exp_pts_sf_win,exp_pts_champ_win,exp_pts_blood_win,' +
+      'exp_pts_wb_qf_win,exp_pts_wb_sf_win,exp_pts_3rd_win,exp_pts_5th_win,exp_pts_7th_win,' +
+      'prob_secures_finals,prob_secures_aa,prob_secures_top6,prob_secures_top4',
     )
     .eq('season_id', season.id)
     .not('athlete_id', 'is', null) as { data: any[] | null }
@@ -180,18 +184,32 @@ export async function POST(req: Request) {
     if (!r.athlete_id) continue
     modelDataMap.set(r.athlete_id, {
       athlete_id: r.athlete_id,
-      mc_p1: r.mc_p1 ?? 0,
-      mc_p2: r.mc_p2 ?? 0,
-      mc_p3: r.mc_p3 ?? 0,
-      mc_p4: r.mc_p4 ?? 0,
-      mc_p5: r.mc_p5 ?? 0,
-      mc_p6: r.mc_p6 ?? 0,
-      mc_p7: r.mc_p7 ?? 0,
-      mc_p8: r.mc_p8 ?? 0,
+      mc_p1:  r.mc_p1  ?? 0,
+      mc_p2:  r.mc_p2  ?? 0,
+      mc_p3:  r.mc_p3  ?? 0,
+      mc_p4:  r.mc_p4  ?? 0,
+      mc_p5:  r.mc_p5  ?? 0,
+      mc_p6:  r.mc_p6  ?? 0,
+      mc_p7:  r.mc_p7  ?? 0,
+      mc_p8:  r.mc_p8  ?? 0,
       mc_top8: r.mc_top8 ?? 0,
       mc_expected_points: r.mc_expected_points ?? 0,
-      ws_elo: r.ws_elo ?? null,
+      ws_elo:     r.ws_elo     ?? null,
       bonus_rate: r.bonus_rate ?? null,
+      // Round-conditional expected placement points (v2 format)
+      exp_pts_qf_win:    r.exp_pts_qf_win    ?? null,
+      exp_pts_sf_win:    r.exp_pts_sf_win    ?? null,
+      exp_pts_champ_win: r.exp_pts_champ_win ?? null,
+      exp_pts_blood_win: r.exp_pts_blood_win ?? null,
+      exp_pts_wb_qf_win: r.exp_pts_wb_qf_win ?? null,
+      exp_pts_wb_sf_win: r.exp_pts_wb_sf_win ?? null,
+      exp_pts_3rd_win:   r.exp_pts_3rd_win   ?? null,
+      exp_pts_5th_win:   r.exp_pts_5th_win   ?? null,
+      exp_pts_7th_win:   r.exp_pts_7th_win   ?? null,
+      prob_secures_finals: r.prob_secures_finals ?? null,
+      prob_secures_aa:     r.prob_secures_aa     ?? null,
+      prob_secures_top6:   r.prob_secures_top6   ?? null,
+      prob_secures_top4:   r.prob_secures_top4   ?? null,
     })
   }
 

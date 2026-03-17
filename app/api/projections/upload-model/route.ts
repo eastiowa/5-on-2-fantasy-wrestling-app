@@ -28,16 +28,10 @@ import Papa from 'papaparse'
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ModelCsvRow {
-  weight: string
+  // Common to both old and new CSV formats
   name: string
-  school?: string
-  conference?: string
+  weight: string
   seed?: string
-  ws_elo?: string
-  win_rate?: string
-  bonus_rate?: string
-  model_score?: string
-  value_tier?: string
   salary?: string
   mc_p1?: string
   mc_p2?: string
@@ -48,10 +42,57 @@ interface ModelCsvRow {
   mc_p7?: string
   mc_p8?: string
   mc_top8?: string
-  mc_expected_points?: string
+
+  // ── Present in all formats ────────────────────────────────────────────────
+  school?: string
+  conference?: string
+  rank?: string
+  p4p_rank?: string
+  record?: string
+  win_pct?: string
+
+  // ── Skill / rating fields ─────────────────────────────────────────────────
+  elo?: string          // final format uses "elo" (was "ws_elo" in v1)
+  ws_elo?: string       // v1 legacy name — still accepted
+  bonus_rate?: string
+  adj_bonus_rate?: string
+  win_rate?: string
+  adj_win_rate?: string
+  pairwise_rating?: string
+  blended_seed_gap?: string
+
+  // ── v1-only ───────────────────────────────────────────────────────────────
+  model_score?: string
+  value_tier?: string
+  mc_expected_points?: string    // v1 pre-computed expected total
   cash_score?: string
   gpp_score?: string
   value_score?: string
+
+  // ── v2/v3 format ─────────────────────────────────────────────────────────
+  ncaa_expected_placement_points?: string
+  ncaa_expected_placement_points_timed?: string
+  ncaa_expected_advancement_points?: string
+  ncaa_expected_bonus_points?: string
+  ncaa_expected_team_points?: string           // v2 non-timed total
+  ncaa_expected_team_points_timed?: string     // v2/v3 timed total (primary in v3)
+  ncaa_points_rank_in_weight?: string
+  // Round-conditional expected placement points
+  exp_place_pts_qf_win?: string
+  exp_place_pts_sf_win?: string
+  exp_place_pts_champ_win?: string
+  exp_place_pts_blood_round_win?: string
+  exp_place_pts_wb_quarter_win?: string
+  exp_place_pts_wb_semifinal_win?: string
+  exp_place_pts_3rd_match_win?: string
+  exp_place_pts_5th_match_win?: string
+  exp_place_pts_7th_match_win?: string
+  // Milestone probabilities
+  prob_secures_finals?: string
+  prob_secures_aa_via_blood?: string
+  prob_secures_top6_via_wb_qf?: string
+  prob_secures_top4_via_wb_sf?: string        // v2 name
+  prob_secures_top4_via_wbsf?: string         // v3 name (no underscore)
 }
 
 // ─── Name normalisation ───────────────────────────────────────────────────────
@@ -194,33 +235,78 @@ export async function POST(req: Request) {
       unmatched.push(`${csvName} (${weightRaw} lbs)`)
     }
 
+    // ── Resolve expected total points ─────────────────────────────────────────
+    // New format: ncaa_expected_team_points  (primary)
+    //             ncaa_expected_team_points_timed (timed variant, nearly identical)
+    // Old format: mc_expected_points
+    const mcExpected =
+      safeFloat(row.ncaa_expected_team_points) ??
+      safeFloat(row.ncaa_expected_team_points_timed) ??
+      safeFloat(row.mc_expected_points) ??
+      0
+
     // Build upsert row — nulls for unmatched athlete_id
     upsertRows.push({
       season_id: season.id,
       athlete_id: athleteId,
       csv_name: csvName,
-      csv_school: row.school?.trim() ?? null,
+      csv_school: row.school?.trim() ?? null,   // null in new format; fine
       weight: weightRaw,
       seed: safeInt(row.seed),
-      ws_elo: safeFloat(row.ws_elo),
-      win_rate: safeFloat(row.win_rate),
-      bonus_rate: safeFloat(row.bonus_rate),
-      model_score: safeFloat(row.model_score),
-      value_tier: row.value_tier?.trim() ?? null,
-      salary: safeInt(row.salary),
-      mc_p1: safeFloat(row.mc_p1) ?? 0,
-      mc_p2: safeFloat(row.mc_p2) ?? 0,
-      mc_p3: safeFloat(row.mc_p3) ?? 0,
-      mc_p4: safeFloat(row.mc_p4) ?? 0,
-      mc_p5: safeFloat(row.mc_p5) ?? 0,
-      mc_p6: safeFloat(row.mc_p6) ?? 0,
-      mc_p7: safeFloat(row.mc_p7) ?? 0,
-      mc_p8: safeFloat(row.mc_p8) ?? 0,
+
+      // Skill / rating fields — accept both old and new column names
+      ws_elo:      safeFloat(row.elo) ?? safeFloat(row.ws_elo),
+      win_rate:    safeFloat(row.adj_win_rate) ?? safeFloat(row.win_rate),
+      bonus_rate:  safeFloat(row.adj_bonus_rate) ?? safeFloat(row.bonus_rate),
+      model_score: safeFloat(row.pairwise_rating) ?? safeFloat(row.model_score),
+      value_tier:  row.value_tier?.trim() ?? null,
+      salary:      safeInt(row.salary),
+
+      // Placement probability distribution (present in both formats)
+      mc_p1:  safeFloat(row.mc_p1)  ?? 0,
+      mc_p2:  safeFloat(row.mc_p2)  ?? 0,
+      mc_p3:  safeFloat(row.mc_p3)  ?? 0,
+      mc_p4:  safeFloat(row.mc_p4)  ?? 0,
+      mc_p5:  safeFloat(row.mc_p5)  ?? 0,
+      mc_p6:  safeFloat(row.mc_p6)  ?? 0,
+      mc_p7:  safeFloat(row.mc_p7)  ?? 0,
+      mc_p8:  safeFloat(row.mc_p8)  ?? 0,
       mc_top8: safeFloat(row.mc_top8) ?? 0,
-      mc_expected_points: safeFloat(row.mc_expected_points) ?? 0,
-      cash_score: safeFloat(row.cash_score),
-      gpp_score: safeFloat(row.gpp_score),
+      mc_expected_points: mcExpected,
+
+      // Old-format DFS scores
+      cash_score:  safeFloat(row.cash_score),
+      gpp_score:   safeFloat(row.gpp_score),
       value_score: safeFloat(row.value_score),
+
+      // ── New-format breakdown fields (migration 017) ──────────────────────
+      ncaa_expected_placement_points:   safeFloat(row.ncaa_expected_placement_points),
+      ncaa_expected_advancement_points: safeFloat(row.ncaa_expected_advancement_points),
+      ncaa_expected_bonus_points:       safeFloat(row.ncaa_expected_bonus_points),
+      ncaa_expected_team_points_timed:  safeFloat(row.ncaa_expected_team_points_timed),
+      ncaa_points_rank_in_weight:       safeInt(row.ncaa_points_rank_in_weight),
+
+      // Round-conditional expected placement points
+      exp_pts_qf_win:    safeFloat(row.exp_place_pts_qf_win),
+      exp_pts_sf_win:    safeFloat(row.exp_place_pts_sf_win),
+      exp_pts_champ_win: safeFloat(row.exp_place_pts_champ_win),
+      exp_pts_blood_win: safeFloat(row.exp_place_pts_blood_round_win),
+      exp_pts_wb_qf_win: safeFloat(row.exp_place_pts_wb_quarter_win),
+      exp_pts_wb_sf_win: safeFloat(row.exp_place_pts_wb_semifinal_win),
+      exp_pts_3rd_win:   safeFloat(row.exp_place_pts_3rd_match_win),
+      exp_pts_5th_win:   safeFloat(row.exp_place_pts_5th_match_win),
+      exp_pts_7th_win:   safeFloat(row.exp_place_pts_7th_match_win),
+
+      // Milestone probabilities
+      // Note: v3 CSV uses "prob_secures_top4_via_wbsf" (no underscore before sf)
+      //       v2 CSV uses "prob_secures_top4_via_wb_sf"
+      prob_secures_finals: safeFloat(row.prob_secures_finals),
+      prob_secures_aa:     safeFloat(row.prob_secures_aa_via_blood),
+      prob_secures_top6:   safeFloat(row.prob_secures_top6_via_wb_qf),
+      prob_secures_top4:
+        safeFloat((row as any).prob_secures_top4_via_wbsf) ??
+        safeFloat(row.prob_secures_top4_via_wb_sf),
+
       uploaded_at: new Date().toISOString(),
     })
   }

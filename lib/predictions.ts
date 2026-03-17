@@ -55,9 +55,14 @@ const AVG_BONUS_PER_WIN = 0.30
  * Per-athlete data from the external Monte Carlo simulation CSV.
  * Loaded from the athlete_model_data table and passed to computeProjections.
  * When present, these values replace the seed-based bracket simulation.
+ *
+ * Supports both CSV formats:
+ *   v1 (mc_full_results_2026.csv)               — ws_elo, bonus_rate present
+ *   v2 (final_mc_simulation_ncaa_scoring_*.csv)  — round-conditional pts present
  */
 export interface AthleteModelData {
   athlete_id: string
+
   // Monte Carlo placement probability distribution (sum ≤ 1.0; remainder = DNP)
   mc_p1: number
   mc_p2: number
@@ -68,10 +73,32 @@ export interface AthleteModelData {
   mc_p7: number
   mc_p8: number
   mc_top8: number
-  mc_expected_points: number  // pre-tournament expected fantasy points
-  // Per-wrestler skill metrics (optional — used for power rating override)
-  ws_elo: number | null       // Elo rating (replaces generic seed power rating)
-  bonus_rate: number | null   // Historical bonus-point win rate
+
+  // Pre-tournament expected fantasy points (maps to ncaa_expected_team_points in v2)
+  mc_expected_points: number
+
+  // v1-only skill metrics
+  ws_elo: number | null
+  bonus_rate: number | null
+
+  // v2: round-conditional expected PLACEMENT points
+  // = expected placement pts if this athlete wins the named round
+  // Used by conditionalExpectedRemaining() for precise in-tournament projections
+  exp_pts_qf_win:    number | null  // wins championship QF
+  exp_pts_sf_win:    number | null  // wins championship SF
+  exp_pts_champ_win: number | null  // wins championship final
+  exp_pts_blood_win: number | null  // wins blood round (consolation)
+  exp_pts_wb_qf_win: number | null  // wins wrestleback QF
+  exp_pts_wb_sf_win: number | null  // wins wrestleback SF
+  exp_pts_3rd_win:   number | null  // wins 3rd-place bout
+  exp_pts_5th_win:   number | null  // wins 5th-place bout
+  exp_pts_7th_win:   number | null  // wins 7th-place bout
+
+  // v2: milestone probabilities
+  prob_secures_finals: number | null  // P(reaches championship final)
+  prob_secures_aa:     number | null  // P(All-American via blood round)
+  prob_secures_top6:   number | null  // P(top-6 via wrestleback QF)
+  prob_secures_top4:   number | null  // P(top-4 via wrestleback SF)
 }
 
 /** Return the mc_p distribution as an array indexed by placement 1–8. */
@@ -115,14 +142,15 @@ export function getAchievablePlacements(
 }
 
 /**
- * Expected remaining points for an athlete using their mc_p distribution,
- * conditioned on their current bracket state.
+ * Expected remaining points for an athlete, conditioned on their current bracket state.
  *
- * For pre-tournament athletes (bracketStatus = 'unknown'), returns mc_expected_points.
+ * STRATEGY A (v2 CSV — preferred): Use the round-conditional expected placement
+ * points from the model directly.  These are pre-computed per-athlete values for
+ * "what are my expected placement points if I win the next round?"  Combined with
+ * an advancement points estimate, this gives a precise in-tournament projection.
  *
- * For athletes still alive, re-normalises the mc_p distribution over achievable
- * placements, computes conditional expected placement points, adds an estimate
- * of remaining advancement wins, then subtracts already-earned points.
+ * STRATEGY B (v1 CSV fallback): Bayesian update of the mc_p distribution over
+ * achievable placements.
  *
  * Returns 0 for placed or eliminated athletes.
  */
@@ -135,52 +163,102 @@ export function conditionalExpectedRemaining(
 ): number {
   if (bracketStatus === 'placed' || bracketStatus === 'eliminated') return 0
 
-  // Pre-tournament: use model directly
+  // Pre-tournament / unknown: use full model expectation
   if (bracketStatus === 'unknown') {
     return Math.max(0, model.mc_expected_points - currentPoints)
   }
 
+  // ── Strategy A: round-conditional expected placement points (v2 CSV) ───────
+  //
+  // Look up the correct conditional expected placement pts based on bracket state.
+  // For championship bracket: "winning the next round" determines their expected pts.
+  // For consolation bracket: similarly.
+  //
+  // bracketStatus = 'championship', championshipWins:
+  //   0 → about to wrestle R1/pigtail → no direct lookup; use Bayesian fallback
+  //   1 → about to wrestle QF         → exp_pts_qf_win
+  //   2 → about to wrestle SF         → exp_pts_sf_win
+  //   3 → about to wrestle Finals     → exp_pts_champ_win
+  //
+  // bracketStatus = 'consolation', consolationWins:
+  //   0 → in blood round area         → exp_pts_blood_win
+  //   1 → in wrestleback QF area      → exp_pts_wb_qf_win
+  //   2 → in wrestleback SF area      → exp_pts_wb_sf_win
+  //   (entered consolation from SF loss: 3rd/4th bout)
+  //   special: championshipWins ≥ 2   → exp_pts_3rd_win
+  //
+  // These are the EXPECTED placement points from this point forward.
+  // We add estimated advancement pts and subtract what's already been earned.
+
+  let conditionalPlacementPts: number | null = null
+
+  if (bracketStatus === 'championship') {
+    if (championshipWins === 3 && model.exp_pts_champ_win !== null) {
+      conditionalPlacementPts = model.exp_pts_champ_win
+    } else if (championshipWins === 2 && model.exp_pts_sf_win !== null) {
+      conditionalPlacementPts = model.exp_pts_sf_win
+    } else if (championshipWins === 1 && model.exp_pts_qf_win !== null) {
+      conditionalPlacementPts = model.exp_pts_qf_win
+    }
+    // championshipWins === 0: pre-first-bout; use Bayesian fallback below
+  }
+
+  if (bracketStatus === 'consolation') {
+    if (championshipWins >= 2 && model.exp_pts_3rd_win !== null) {
+      // Lost in SF → 3rd/4th bout
+      conditionalPlacementPts = model.exp_pts_3rd_win
+    } else if (consolationWins >= 2 && model.exp_pts_wb_sf_win !== null) {
+      conditionalPlacementPts = model.exp_pts_wb_sf_win
+    } else if (consolationWins >= 1 && model.exp_pts_wb_qf_win !== null) {
+      conditionalPlacementPts = model.exp_pts_wb_qf_win
+    } else if (model.exp_pts_blood_win !== null) {
+      conditionalPlacementPts = model.exp_pts_blood_win
+    }
+  }
+
+  if (conditionalPlacementPts !== null) {
+    // Add estimated remaining advancement points
+    const effectiveBonus = model.bonus_rate ?? AVG_BONUS_PER_WIN
+    const champWinsLeft =
+      bracketStatus === 'championship'
+        ? Math.max(0, 4 - championshipWins)
+        : 0
+    const consolWinsLeft =
+      bracketStatus === 'consolation'
+        ? Math.max(0, 3 - consolationWins)
+        : 0
+    // Discount by expected win rate — athlete won't necessarily win every remaining bout
+    const effectiveWinsLeft = (champWinsLeft + consolWinsLeft) * 0.5
+    const advancementPts = effectiveWinsLeft * (1 + effectiveBonus)
+
+    return Math.max(0, conditionalPlacementPts + advancementPts - currentPoints)
+  }
+
+  // ── Strategy B: Bayesian update of mc_p distribution (v1 CSV fallback) ────
   const achievable = getAchievablePlacements(bracketStatus, championshipWins)
   if (achievable.length === 0) return 0
 
   const pArr = mcPArray(model)
-  // Sum of mc_p mass over achievable placements (normalisation denominator)
   const achievableMass = achievable.reduce((s, p) => s + (pArr[p] ?? 0), 0)
 
-  let conditionalPlacementPts: number
+  let bPlacementPts: number
   if (achievableMass <= 0.001) {
-    // Model gave near-zero mass to achievable placements — use equal-weight fallback
-    conditionalPlacementPts =
+    bPlacementPts =
       achievable.reduce((s, p) => s + (PLACEMENT_POINTS[p] ?? 0), 0) / achievable.length
   } else {
-    // Bayesian update: P(place p | alive) ∝ mc_p[p] for achievable p
-    conditionalPlacementPts = achievable.reduce((s, p) => {
-      const conditionalP = (pArr[p] ?? 0) / achievableMass
-      return s + conditionalP * (PLACEMENT_POINTS[p] ?? 0)
+    bPlacementPts = achievable.reduce((s, p) => {
+      return s + ((pArr[p] ?? 0) / achievableMass) * (PLACEMENT_POINTS[p] ?? 0)
     }, 0)
   }
 
-  // Estimate remaining advancement wins from current position to expected final outcome.
-  // Championship wins still needed:
-  //   k=0 in champ → ~2 more wins on average (not everyone makes finals)
-  //   k=1 → ~1.5 more, k=2 → ~1, k≥3 → ~0.5 (the finals win)
-  const champWinsRemaining =
-    bracketStatus === 'championship'
-      ? Math.max(0, (3.5 - championshipWins) * 0.5)
-      : 0
-
-  // Consolation wins still needed depends on how deep in consolation
-  const consolWinsRemaining =
-    bracketStatus === 'consolation'
-      ? Math.max(0, 1.5 - consolationWins * 0.3)
-      : 0
-
   const effectiveBonus = model.bonus_rate ?? AVG_BONUS_PER_WIN
-  const advancementPts =
-    (champWinsRemaining + consolWinsRemaining) * (1 + effectiveBonus)
+  const champWinsRemaining =
+    bracketStatus === 'championship' ? Math.max(0, (3.5 - championshipWins) * 0.5) : 0
+  const consolWinsRemaining =
+    bracketStatus === 'consolation' ? Math.max(0, 1.5 - consolationWins * 0.3) : 0
+  const advancementPts = (champWinsRemaining + consolWinsRemaining) * (1 + effectiveBonus)
 
-  const expectedTotal = conditionalPlacementPts + advancementPts
-  return Math.max(0, expectedTotal - currentPoints)
+  return Math.max(0, bPlacementPts + advancementPts - currentPoints)
 }
 
 // ─── Public types ─────────────────────────────────────────────────────────────
