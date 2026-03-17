@@ -173,7 +173,10 @@ export async function POST(req: Request) {
       'ws_elo,bonus_rate,' +
       'exp_pts_qf_win,exp_pts_sf_win,exp_pts_champ_win,exp_pts_blood_win,' +
       'exp_pts_wb_qf_win,exp_pts_wb_sf_win,exp_pts_3rd_win,exp_pts_5th_win,exp_pts_7th_win,' +
-      'prob_secures_finals,prob_secures_aa,prob_secures_top6,prob_secures_top4',
+      'prob_secures_finals,prob_secures_aa,prob_secures_top6,prob_secures_top4,' +
+      'anchored_score_if_place_1,anchored_score_if_place_2,anchored_score_if_place_3,' +
+      'anchored_score_if_place_4,anchored_score_if_place_5,anchored_score_if_place_6,' +
+      'anchored_score_if_place_7,anchored_score_if_place_8,anchored_score_if_nonaa',
     )
     .eq('season_id', season.id)
     .not('athlete_id', 'is', null) as { data: any[] | null }
@@ -210,6 +213,16 @@ export async function POST(req: Request) {
       prob_secures_aa:     r.prob_secures_aa     ?? null,
       prob_secures_top6:   r.prob_secures_top6   ?? null,
       prob_secures_top4:   r.prob_secures_top4   ?? null,
+      // Anchored scores (v3 format — migration 019)
+      anchored_score_if_place_1: r.anchored_score_if_place_1 ?? null,
+      anchored_score_if_place_2: r.anchored_score_if_place_2 ?? null,
+      anchored_score_if_place_3: r.anchored_score_if_place_3 ?? null,
+      anchored_score_if_place_4: r.anchored_score_if_place_4 ?? null,
+      anchored_score_if_place_5: r.anchored_score_if_place_5 ?? null,
+      anchored_score_if_place_6: r.anchored_score_if_place_6 ?? null,
+      anchored_score_if_place_7: r.anchored_score_if_place_7 ?? null,
+      anchored_score_if_place_8: r.anchored_score_if_place_8 ?? null,
+      anchored_score_if_nonaa:   r.anchored_score_if_nonaa   ?? null,
     })
   }
 

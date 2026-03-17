@@ -95,10 +95,24 @@ export interface AthleteModelData {
   exp_pts_7th_win:   number | null  // wins 7th-place bout
 
   // v2: milestone probabilities
-  prob_secures_finals: number | null  // P(reaches championship final)
-  prob_secures_aa:     number | null  // P(All-American via blood round)
-  prob_secures_top6:   number | null  // P(top-6 via wrestleback QF)
-  prob_secures_top4:   number | null  // P(top-4 via wrestleback SF)
+  prob_secures_finals: number | null
+  prob_secures_aa:     number | null
+  prob_secures_top6:   number | null
+  prob_secures_top4:   number | null
+
+  // v3 (anchored model): per-placement anchored expected total scores
+  // anchored_score_if_place_X = full expected fantasy pts if athlete finishes at that spot
+  // Used by conditionalExpectedRemaining() for the most precise in-tournament projection:
+  //   E[score | alive] = Σ P(p | alive) × anchored_score_if_place_p
+  anchored_score_if_place_1: number | null
+  anchored_score_if_place_2: number | null
+  anchored_score_if_place_3: number | null
+  anchored_score_if_place_4: number | null
+  anchored_score_if_place_5: number | null
+  anchored_score_if_place_6: number | null
+  anchored_score_if_place_7: number | null
+  anchored_score_if_place_8: number | null
+  anchored_score_if_nonaa:   number | null  // expected pts if DNP (~1.75)
 }
 
 /** Return the mc_p distribution as an array indexed by placement 1–8. */
@@ -166,6 +180,60 @@ export function conditionalExpectedRemaining(
   // Pre-tournament / unknown: use full model expectation
   if (bracketStatus === 'unknown') {
     return Math.max(0, model.mc_expected_points - currentPoints)
+  }
+
+  // ── Strategy AA: anchored per-placement expected scores (v3 CSV) ──────────
+  //
+  // If anchored_score_if_place_X data is present, use the conditional
+  // expectation directly: E[score | alive] = Σ P(p | alive) × anchored_score_p
+  // This is the most accurate method because:
+  //   1. Anchored scores already embed placement + advancement + bonus pts
+  //   2. mc_p1-mc_p8 give the marginal placement distribution
+  //   3. We condition on the achievable placements given current bracket state
+  //
+  // For non-AA outcome, we add P(nonAA | still active) × anchored_score_if_nonaa.
+  // P(nonAA | still active) = 1 - achievableMass / total_mass (if they go on
+  // to lose from their current bracket position without placing).
+  {
+    const anchoredMap: Record<number, number | null> = {
+      1: model.anchored_score_if_place_1,
+      2: model.anchored_score_if_place_2,
+      3: model.anchored_score_if_place_3,
+      4: model.anchored_score_if_place_4,
+      5: model.anchored_score_if_place_5,
+      6: model.anchored_score_if_place_6,
+      7: model.anchored_score_if_place_7,
+      8: model.anchored_score_if_place_8,
+    }
+
+    const hasAnchoredData = Object.values(anchoredMap).some(v => v !== null)
+
+    if (hasAnchoredData) {
+      const achievable = getAchievablePlacements(bracketStatus, championshipWins)
+      const pArr = mcPArray(model)
+
+      // Sum of mc_p over achievable placements
+      const achievableMass = achievable.reduce((s, p) => s + (pArr[p] ?? 0), 0)
+
+      if (achievableMass > 0.001) {
+        // P(nonAA | currently active in bracket)
+        // = proportion of original probability mass NOT in achievable placements
+        // scaled to remaining outcomes from current position
+        const totalMass = (model.mc_top8 > 0 ? model.mc_top8 : achievableMass)
+        const pNonAA = Math.max(0, 1 - achievableMass / Math.max(achievableMass, totalMass * 0.5))
+        const nonAAscore = model.anchored_score_if_nonaa ?? 1.75
+
+        const conditionalTotal =
+          achievable.reduce((s, p) => {
+            const conditionalP = (pArr[p] ?? 0) / achievableMass
+            const score = anchoredMap[p] ?? model.mc_expected_points
+            return s + conditionalP * score
+          }, 0) +
+          pNonAA * nonAAscore
+
+        return Math.max(0, conditionalTotal - currentPoints)
+      }
+    }
   }
 
   // ── Strategy A: round-conditional expected placement points (v2 CSV) ───────

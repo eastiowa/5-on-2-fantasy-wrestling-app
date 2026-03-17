@@ -51,10 +51,28 @@ interface ModelCsvRow {
   record?: string
   win_pct?: string
   // Calibrated model output (fantasy_wrestling_calibrated_model.csv)
-  calibrated_points?: string          // PRIMARY expected pts — use this when present
+  calibrated_points?: string          // use when present (v4 calibrated format)
   record_confidence?: string
   bonus_emphasis_multiplier?: string
   expected_bonus_per_win?: string
+  matches_wrestled?: string
+  form_score?: string
+  elite_score?: string
+  elite_boost?: string
+  // Anchored scores (final_hard_anchor_with_explicit_nonAA_2026.csv)
+  // PRIMARY expected pts: anchored_expected_points_with_nonAA
+  anchored_score_if_place_1?: string
+  anchored_score_if_place_2?: string
+  anchored_score_if_place_3?: string
+  anchored_score_if_place_4?: string
+  anchored_score_if_place_5?: string
+  anchored_score_if_place_6?: string
+  anchored_score_if_place_7?: string
+  anchored_score_if_place_8?: string
+  anchored_score_if_nonAA?: string
+  anchored_expected_points?: string
+  anchored_expected_points_with_nonAA?: string
+  nonaa_explicit_points?: string
 
   // ── Skill / rating fields ─────────────────────────────────────────────────
   elo?: string          // final format uses "elo" (was "ws_elo" in v1)
@@ -242,11 +260,13 @@ export async function POST(req: Request) {
 
     // ── Resolve expected total points ─────────────────────────────────────────
     // Priority order (highest to lowest accuracy):
-    //   1. calibrated_points   — calibrated model output (fantasy_wrestling_calibrated_model.csv)
-    //   2. ncaa_expected_team_points        — v2 raw MC non-timed total
-    //   3. ncaa_expected_team_points_timed  — v2/v3 raw MC timed total
-    //   4. mc_expected_points               — v1 legacy field
+    //   1. anchored_expected_points_with_nonAA — hard-anchored + explicit nonAA
+    //   2. calibrated_points                   — earlier calibrated model
+    //   3. ncaa_expected_team_points            — v2 raw MC non-timed total
+    //   4. ncaa_expected_team_points_timed      — v2/v3 raw MC timed total
+    //   5. mc_expected_points                   — v1 legacy field
     const mcExpected =
+      safeFloat(row.anchored_expected_points_with_nonAA) ??
       safeFloat(row.calibrated_points) ??
       safeFloat(row.ncaa_expected_team_points) ??
       safeFloat(row.ncaa_expected_team_points_timed) ??
@@ -320,6 +340,24 @@ export async function POST(req: Request) {
       record_confidence:         safeFloat(row.record_confidence),
       bonus_emphasis_multiplier: safeFloat(row.bonus_emphasis_multiplier),
       expected_bonus_per_win:    safeFloat(row.expected_bonus_per_win),
+
+      // ── Anchored score fields (migration 019) ─────────────────────────────
+      anchored_score_if_place_1: safeFloat(row.anchored_score_if_place_1),
+      anchored_score_if_place_2: safeFloat(row.anchored_score_if_place_2),
+      anchored_score_if_place_3: safeFloat(row.anchored_score_if_place_3),
+      anchored_score_if_place_4: safeFloat(row.anchored_score_if_place_4),
+      anchored_score_if_place_5: safeFloat(row.anchored_score_if_place_5),
+      anchored_score_if_place_6: safeFloat(row.anchored_score_if_place_6),
+      anchored_score_if_place_7: safeFloat(row.anchored_score_if_place_7),
+      anchored_score_if_place_8: safeFloat(row.anchored_score_if_place_8),
+      anchored_score_if_nonaa:   safeFloat(row.anchored_score_if_nonAA),
+      anchored_expected_points:  safeFloat(row.anchored_expected_points),
+      anchored_expected_points_with_nonaa: safeFloat(row.anchored_expected_points_with_nonAA),
+      nonaa_explicit_points:     safeFloat(row.nonaa_explicit_points),
+      matches_wrestled:          safeInt(row.matches_wrestled),
+      form_score:                safeFloat(row.form_score),
+      elite_score:               safeFloat(row.elite_score),
+      elite_boost:               safeFloat(row.elite_boost),
 
       uploaded_at: new Date().toISOString(),
     })
