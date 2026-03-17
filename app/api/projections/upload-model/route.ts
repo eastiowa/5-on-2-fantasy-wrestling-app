@@ -69,9 +69,10 @@ interface ModelCsvRow {
   anchored_score_if_place_6?: string
   anchored_score_if_place_7?: string
   anchored_score_if_place_8?: string
-  anchored_score_if_nonAA?: string
+  // NOTE: all keys are post-transform (lowercased by Papa.parse transformHeader)
+  anchored_score_if_nonaa?: string                  // CSV: anchored_score_if_nonAA → lowercased
   anchored_expected_points?: string
-  anchored_expected_points_with_nonAA?: string
+  anchored_expected_points_with_nonaa?: string       // CSV: anchored_expected_points_with_nonAA → lowercased
   nonaa_explicit_points?: string
 
   // ── Skill / rating fields ─────────────────────────────────────────────────
@@ -266,7 +267,7 @@ export async function POST(req: Request) {
     //   4. ncaa_expected_team_points_timed      — v2/v3 raw MC timed total
     //   5. mc_expected_points                   — v1 legacy field
     const mcExpected =
-      safeFloat(row.anchored_expected_points_with_nonAA) ??
+      safeFloat(row.anchored_expected_points_with_nonaa) ??
       safeFloat(row.calibrated_points) ??
       safeFloat(row.ncaa_expected_team_points) ??
       safeFloat(row.ncaa_expected_team_points_timed) ??
@@ -350,9 +351,9 @@ export async function POST(req: Request) {
       anchored_score_if_place_6: safeFloat(row.anchored_score_if_place_6),
       anchored_score_if_place_7: safeFloat(row.anchored_score_if_place_7),
       anchored_score_if_place_8: safeFloat(row.anchored_score_if_place_8),
-      anchored_score_if_nonaa:   safeFloat(row.anchored_score_if_nonAA),
+      anchored_score_if_nonaa:   safeFloat(row.anchored_score_if_nonaa),
       anchored_expected_points:  safeFloat(row.anchored_expected_points),
-      anchored_expected_points_with_nonaa: safeFloat(row.anchored_expected_points_with_nonAA),
+      anchored_expected_points_with_nonaa: safeFloat(row.anchored_expected_points_with_nonaa),
       nonaa_explicit_points:     safeFloat(row.nonaa_explicit_points),
       matches_wrestled:          safeInt(row.matches_wrestled),
       form_score:                safeFloat(row.form_score),
