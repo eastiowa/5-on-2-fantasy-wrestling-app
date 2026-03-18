@@ -262,12 +262,14 @@ export async function POST(req: Request) {
     // ── Resolve expected total points ─────────────────────────────────────────
     // Priority order (highest to lowest accuracy):
     //   1. anchored_expected_points_with_nonAA — hard-anchored + explicit nonAA
-    //   2. calibrated_points                   — earlier calibrated model
-    //   3. ncaa_expected_team_points            — v2 raw MC non-timed total
-    //   4. ncaa_expected_team_points_timed      — v2/v3 raw MC timed total
-    //   5. mc_expected_points                   — v1 legacy field
+    //   2. anchored_expected_points            — new workbook-priors format (no nonAA col)
+    //   3. calibrated_points                   — earlier calibrated model
+    //   4. ncaa_expected_team_points            — v2 raw MC non-timed total
+    //   5. ncaa_expected_team_points_timed      — v2/v3 raw MC timed total
+    //   6. mc_expected_points                   — v1 legacy field
     const mcExpected =
       safeFloat(row.anchored_expected_points_with_nonaa) ??
+      safeFloat(row.anchored_expected_points) ??
       safeFloat(row.calibrated_points) ??
       safeFloat(row.ncaa_expected_team_points) ??
       safeFloat(row.ncaa_expected_team_points_timed) ??

@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
-import { Menu, X, LogOut, User, Settings, LayoutDashboard, Users, Trophy, History, Zap } from 'lucide-react'
+import { Menu, X, LogOut, User, Settings, LayoutDashboard, Users, Trophy, History, Zap, TrendingUp } from 'lucide-react'
 
 interface NavbarProps {
   role?: 'commissioner' | 'team_manager' | null
@@ -36,6 +36,7 @@ export function Navbar({ role, hasTeam, currentSeasonLabel, isBootstrap }: Navba
     ...(role ? [
       { href: '/draft', label: 'Draft Room', icon: Users },
     ] : []),
+    ...(role ? [{ href: '/projections', label: 'Projections', icon: TrendingUp }] : []),
     ...(role ? [{ href: '/past-seasons', label: 'Past Seasons', icon: History }] : []),
     ...(role === 'commissioner' ? [
       { href: '/commissioner', label: 'Commissioner', icon: Settings },
