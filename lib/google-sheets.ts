@@ -9,18 +9,121 @@ export function extractSheetId(url: string): string | null {
   return match ? match[1] : null
 }
 
+// ─── Valid NCAA weight classes ─────────────────────────────────────────────
+const WEIGHT_CLASSES = new Set([125, 133, 141, 149, 157, 165, 174, 184, 197, 285])
+
 /**
- * Fetches cumulative score rows from a Google Sheet using a service account.
+ * Detect whether the raw 2-D values array is in bracket format.
+ *
+ * Bracket format (new): the second cell of the first non-empty row is a
+ * recognised weight class number (125, 133, …) and subsequent header cells
+ * start with "S-".
+ *
+ * Flat format (legacy): the first row contains "name" and "score" headers.
+ */
+function isBracketFormat(values: string[][]): boolean {
+  if (!values.length) return false
+  const first = values[0]
+  const secondCell = Number(first[1]?.trim())
+  const hasSessionCols = first.slice(2).some((h) => /^S-\d+$/i.test(h?.trim() ?? ''))
+  return WEIGHT_CLASSES.has(secondCell) && hasSessionCols
+}
+
+/**
+ * Parse the bracket-style sheet.
+ *
+ * Layout (all weight classes stacked on one sheet):
+ *   Header row :  <blank> | <weight> | S-1 | S-2 | S-3 | S-4 | S-5 | S-6
+ *   Wrestler rows: <seed>  | "{seed}) {Name} ({School}) {record}" | pts | pts …
+ *
+ * Rules:
+ *   - A weight-class header row is identified by col[1] being a pure number
+ *     that is a valid NCAA weight class.
+ *   - A wrestler row is identified by col[1] matching the pattern
+ *     /^\d+\) .+ \([A-Z]+\) \d+-\d+/.
+ *   - Total score = sum of S-1 … S-6 (any numeric value in cols 2-7).
+ *   - Rows with a total score of 0 are excluded (athlete hasn't competed yet).
+ *   - place is read from a "Place" column if present, otherwise null.
+ */
+function parseBracketFormat(values: string[][]): { rows: CumulativeScoreRow[]; errors: string[] } {
+  const rows: CumulativeScoreRow[] = []
+  const errors: string[] = []
+
+  // Find how many session columns exist (S-1, S-2, …)
+  const headerRow = values[0]
+  const sessionIndices: number[] = []
+  for (let c = 2; c < headerRow.length; c++) {
+    if (/^S-\d+$/i.test(headerRow[c]?.trim() ?? '')) sessionIndices.push(c)
+  }
+  // Look for an optional Place column
+  const placeColIdx = headerRow.findIndex((h) => /^place$/i.test(h?.trim() ?? ''))
+
+  let currentWeight: number | null = null
+
+  for (let i = 1; i < values.length; i++) {
+    const row = values[i]
+    const col1 = row[1]?.trim() ?? ''
+
+    // ── Weight class header? ─────────────────────────────────────────────────
+    const wNum = Number(col1)
+    if (WEIGHT_CLASSES.has(wNum)) {
+      currentWeight = wNum
+      continue
+    }
+
+    // ── Wrestler row? ────────────────────────────────────────────────────────
+    // Format: "4) Sheldon Seymour (LEH) 19-0"
+    const wrestlerMatch = col1.match(/^\d+\)\s*(.+?)\s*\(([A-Z]+)\)\s*\d+-\d+/)
+    if (!wrestlerMatch) continue
+    if (!currentWeight) {
+      errors.push(`Row ${i + 1}: wrestler "${col1}" found before any weight class header — skipped`)
+      continue
+    }
+
+    const name = wrestlerMatch[1].trim()
+
+    // Sum session scores
+    let score = 0
+    for (const ci of sessionIndices) {
+      const v = parseFloat(row[ci]?.trim() ?? '')
+      if (!isNaN(v) && v > 0) score += v
+    }
+
+    // Skip athletes with no points yet (tournament not started / eliminated early with 0 pts)
+    if (score === 0) continue
+
+    // Optional placement
+    let place: number | null = null
+    if (placeColIdx >= 0) {
+      const pv = parseInt(row[placeColIdx]?.trim() ?? '', 10)
+      if (!isNaN(pv) && pv >= 1 && pv <= 8) place = pv
+    }
+
+    rows.push({ name, team: '', weight: currentWeight, place, score })
+  }
+
+  return { rows, errors }
+}
+
+/**
+ * Fetches score rows from a Google Sheet using a service account.
  * The sheet must be shared with the service account email.
  *
- * Expected sheet columns (row 1 = headers):
- *   name | team | weight | place | score
+ * Supports two formats automatically:
  *
- * "score" is the cumulative total — uploaded rows OVERWRITE existing scores.
+ * ── Bracket format (new) ──────────────────────────────────────────────────
+ *   All weight classes stacked vertically on one sheet.
+ *   Header rows:    <blank> | <weight_class> | S-1 | S-2 | S-3 | S-4 | S-5 | S-6
+ *   Wrestler rows:  <seed>  | "{seed}) Name (School) record" | per-session pts …
+ *   Total score = sum of S-1 … S-6.  Rows with score = 0 are skipped.
+ *
+ * ── Flat format (legacy) ─────────────────────────────────────────────────
+ *   Row 1 headers:  name | team | weight | place | score
+ *   "score" is the pre-computed cumulative total.
  */
 export async function fetchSheetScores(
   spreadsheetId: string,
-  range: string = 'Sheet1!A:E'
+  range: string = 'A:J'           // wide enough for bracket format (seed + wrestler + 6 sessions + extras)
 ): Promise<{ rows: CumulativeScoreRow[]; errors: string[] }> {
   const errors: string[] = []
   const rows: CumulativeScoreRow[] = []
@@ -36,8 +139,8 @@ export async function fetchSheetScores(
   try {
     const token = await getGoogleAccessToken(serviceAccountEmail, privateKey)
 
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`
-    const res = await fetch(url, {
+    const apiUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`
+    const res = await fetch(apiUrl, {
       headers: { Authorization: `Bearer ${token}` },
     })
 
@@ -51,14 +154,20 @@ export async function fetchSheetScores(
     const values: string[][] = data.values ?? []
 
     if (values.length < 2) {
-      errors.push('Sheet appears to be empty or missing headers.')
+      errors.push('Sheet appears to be empty or missing data rows.')
       return { rows, errors }
     }
 
-    // Normalize headers
+    // ── Detect format and delegate ────────────────────────────────────────────
+    if (isBracketFormat(values)) {
+      const result = parseBracketFormat(values)
+      return { rows: result.rows, errors: [...errors, ...result.errors] }
+    }
+
+    // ── Legacy flat format ────────────────────────────────────────────────────
     const headers = values[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'))
     if (!headers.includes('name') || !headers.includes('score')) {
-      errors.push('Sheet must have at least "name" and "score" columns.')
+      errors.push('Sheet must have at least "name" and "score" columns (flat format) or be a bracket-format sheet.')
       return { rows, errors }
     }
 
@@ -87,13 +196,7 @@ export async function fetchSheetScores(
       const weightParsed = weightStr ? Number(weightStr) : null
       const weight = weightParsed && !isNaN(weightParsed) ? weightParsed : null
 
-      rows.push({
-        name,
-        team: get('team'),
-        weight,
-        place,
-        score,
-      })
+      rows.push({ name, team: get('team'), weight, place, score })
     })
   } catch (err) {
     errors.push(`Unexpected error fetching sheet: ${String(err)}`)
