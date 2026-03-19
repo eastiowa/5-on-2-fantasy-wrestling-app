@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   BarChart3, Upload, Link2, AlertCircle, CheckCircle,
-  Loader2, Download, Zap, ToggleLeft, ToggleRight, RefreshCw, Clock, BrainCircuit,
+  Loader2, Download, Zap, ToggleLeft, ToggleRight, RefreshCw, BrainCircuit,
 } from 'lucide-react'
 import { generateScoreCSVTemplate } from '@/lib/scoring'
 import { createClient } from '@/lib/supabase/client'
@@ -338,24 +338,6 @@ export default function ScoresPage() {
           </button>
         </div>
 
-        {/* cron-job.org setup hint */}
-        <div className="bg-gray-800/60 rounded-lg p-4 text-xs text-gray-400 space-y-1.5">
-          <div className="flex items-center gap-1.5 text-gray-300 font-medium">
-            <Clock className="w-3.5 h-3.5" />
-            Automated polling via cron-job.org (free)
-          </div>
-          <p>
-            Create a free job at{' '}
-            <a href="https://cron-job.org" target="_blank" rel="noopener noreferrer"
-              className="text-yellow-400 hover:underline">cron-job.org</a>{' '}
-            pointing to:
-          </p>
-          <code className="block bg-gray-900 rounded px-3 py-1.5 text-gray-300 break-all">
-            POST {typeof window !== 'undefined' ? window.location.origin : 'https://yourapp.vercel.app'}
-            /api/scores/scrape-trackwrestling
-          </code>
-          <p>Add a request header: <code className="text-gray-300">x-cron-secret</code> → your <code className="text-gray-300">CRON_SECRET</code> env value. Set schedule to every 2 minutes during tournament weekends.</p>
-        </div>
       </div>
 
       {/* ── CSV Upload ───────────────────────────────────────────────────────── */}
