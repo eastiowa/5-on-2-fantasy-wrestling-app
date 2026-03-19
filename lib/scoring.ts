@@ -58,9 +58,10 @@ export function parseCumulativeScoreCSV(csvText: string): ParsedCumulativeResult
   result.data.forEach((row, i) => {
     const lineNum = i + 2 // 1-indexed + header row
 
-    const name = row.name?.trim()
+    // Accept both "name" and "draft name" (→ "draft_name") as the athlete name column
+    const name = (row.name ?? row.draft_name)?.trim()
     if (!name) {
-      errors.push(`Row ${lineNum}: Missing required field "name"`)
+      errors.push(`Row ${lineNum}: Missing required field "name" (or "Draft Name")`)
       return
     }
 
