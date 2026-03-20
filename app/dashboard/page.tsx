@@ -324,11 +324,7 @@ export default async function DashboardPage() {
                                   <Zap className="w-3 h-3" />{athlete.consol_wins} consol {athlete.consol_wins === 1 ? 'win' : 'wins'}
                                 </span>
                               )}
-                              {athlete.bonus_points > 0 && (
-                                <span className="flex items-center gap-1 text-xs bg-blue-400/10 text-blue-300 px-2 py-0.5 rounded-full">
-                                  <Award className="w-3 h-3" />+{formatPoints(athlete.bonus_points)} bonus
-                                </span>
-                              )}
+
                               {athlete.placement_points > 0 && (
                                 <span className="flex items-center gap-1 text-xs bg-green-400/10 text-green-300 px-2 py-0.5 rounded-full">
                                   <Trophy className="w-3 h-3" />

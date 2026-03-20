@@ -23,7 +23,7 @@ async function getStandings() {
   // Get all draft picks with athlete scores
   const { data: picks } = await supabase
     .from('draft_picks')
-    .select('team_id, athlete:athletes(id, name, weight, seed, school, scores(total_points))')
+    .select('team_id, athlete:athletes(id, name, weight, seed, school, scores(total_points, placement))')
 
   // Get announcements
   const { data: announcements } = await supabase
@@ -78,15 +78,23 @@ async function getStandings() {
   const teamTotals: Record<string, number> = {}
   const teamProjected: Record<string, number> = {}
   const teamAthleteCount: Record<string, number> = {}
+  const teamPlacedCount: Record<string, number> = {}
 
   picks?.forEach((pick) => {
     const athleteId = (pick.athlete as any)?.id as string | undefined
-    const actualPoints: number = (pick.athlete as any)?.scores?.reduce(
+    const scores: any[] = (pick.athlete as any)?.scores ?? []
+    const actualPoints: number = scores.reduce(
       (sum: number, s: any) => sum + (s.total_points ?? 0),
       0
-    ) ?? 0
+    )
     teamTotals[pick.team_id] = (teamTotals[pick.team_id] ?? 0) + actualPoints
     teamAthleteCount[pick.team_id] = (teamAthleteCount[pick.team_id] ?? 0) + 1
+
+    // Count athletes that have been assigned a final placement
+    const hasPlacement = scores.some((s: any) => s.placement != null)
+    if (hasPlacement) {
+      teamPlacedCount[pick.team_id] = (teamPlacedCount[pick.team_id] ?? 0) + 1
+    }
 
     // Projected = max(actual earned so far, pre-tournament model expectation)
     // Pre-tournament: actual=0, model=16.4  → projected=16.4
@@ -112,6 +120,7 @@ async function getStandings() {
         team: team as Team & { manager: { display_name: string | null; email: string } },
         total_points: teamTotals[team.id] ?? 0,
         athletes_drafted: teamAthleteCount[team.id] ?? 0,
+        athletes_placed: teamPlacedCount[team.id] ?? 0,
         projected_total: liveProjTotal ?? modelProjTotal,
         win_probability: liveWinProb,
       }
@@ -321,7 +330,7 @@ export default async function HomePage() {
               </div>
             ) : (
               <div className="divide-y divide-gray-800">
-                {standings.map(({ team, total_points, athletes_drafted, rank, projected_total, win_probability }) => {
+                {standings.map(({ team, total_points, athletes_drafted, athletes_placed, rank, projected_total, win_probability }) => {
                   // Show projections whenever the model has computed them (not gated by season status)
                   const hasProjections = projected_total !== null
                   return (
@@ -349,7 +358,7 @@ export default async function HomePage() {
                         <div className="text-xs text-gray-500 truncate">
                           {team.manager?.display_name ?? team.manager?.email ?? 'No manager'}
                           {' · '}
-                          {athletes_drafted}/10 athletes drafted
+                          {athletes_placed}/{athletes_drafted} placing
                         </div>
                       </div>
 

@@ -1,44 +1,19 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import {
-  BarChart3, Upload, Link2, AlertCircle, CheckCircle,
-  Loader2, Download, Zap, ToggleLeft, ToggleRight, RefreshCw, BrainCircuit,
+  BarChart3, Upload, AlertCircle, CheckCircle,
+  Loader2, Download, BrainCircuit,
 } from 'lucide-react'
 import { generateScoreCSVTemplate } from '@/lib/scoring'
-import { createClient } from '@/lib/supabase/client'
-import { formatDistanceToNow } from 'date-fns'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ScrapeSettings {
-  trackwrestling_url: string | null
-  auto_scrape_enabled: boolean
-  last_scraped_at: string | null
-  last_scrape_status: 'idle' | 'ok' | 'error'
-  last_scrape_message: string | null
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function ScoresPage() {
-  const supabase = createClient()
-
   // CSV state
   const [csvText, setCsvText] = useState('')
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-
-  // Google Sheets state
-  const [sheetsUrl, setSheetsUrl] = useState('')
-  const [syncing, setSyncing] = useState(false)
-
-  // TrackWrestling state
-  const [scrapeSettings, setScrapeSettings] = useState<ScrapeSettings | null>(null)
-  const [twUrl, setTwUrl] = useState('')
-  const [savingUrl, setSavingUrl] = useState(false)
-  const [togglingAuto, setTogglingAuto] = useState(false)
-  const [scraping, setScraping] = useState(false)
 
   // Model data upload state
   const modelFileRef = useRef<HTMLInputElement>(null)
@@ -49,32 +24,6 @@ export default function ScoresPage() {
   // Shared result / error
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
-
-  // ── Load scrape_settings on mount + subscribe to realtime updates ──────────
-  const loadScrapeSettings = useCallback(async () => {
-    const { data } = await supabase.from('scrape_settings').select('*').single()
-    if (data) {
-      setScrapeSettings(data as ScrapeSettings)
-      setTwUrl(data.trackwrestling_url ?? '')
-    }
-  }, [supabase])
-
-  useEffect(() => {
-    loadScrapeSettings()
-
-    const channel = supabase
-      .channel('scrape_settings_changes')
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'scrape_settings' },
-        (payload) => {
-          setScrapeSettings(payload.new as ScrapeSettings)
-        },
-      )
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [loadScrapeSettings, supabase])
 
   // ── CSV upload ─────────────────────────────────────────────────────────────
   function downloadTemplate() {
@@ -110,74 +59,6 @@ export default function ScoresPage() {
     const reader = new FileReader()
     reader.onload = (evt) => setCsvText(evt.target?.result as string)
     reader.readAsText(file)
-  }
-
-  // ── Google Sheets sync ─────────────────────────────────────────────────────
-  async function handleSheetsSync() {
-    if (!sheetsUrl.trim()) return
-    setSyncing(true)
-    setError(null)
-    setResult(null)
-    const res = await fetch('/api/scores/sync-sheets', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sheet_url: sheetsUrl }),
-    })
-    const data = await res.json()
-    setSyncing(false)
-    if (!res.ok) setError(data.error)
-    else setResult(data)
-  }
-
-  // ── TrackWrestling: save URL ───────────────────────────────────────────────
-  async function handleSaveUrl() {
-    if (!twUrl.trim()) return
-    setSavingUrl(true)
-    setError(null)
-    const { error: err } = await supabase
-      .from('scrape_settings')
-      .update({
-        trackwrestling_url: twUrl.trim(),
-        updated_at: new Date().toISOString(),
-      })
-      .neq('id', '00000000-0000-0000-0000-000000000000')
-    setSavingUrl(false)
-    if (err) setError(`Failed to save URL: ${err.message}`)
-    else await loadScrapeSettings()
-  }
-
-  // ── TrackWrestling: toggle auto-sync ───────────────────────────────────────
-  async function handleToggleAuto() {
-    if (!scrapeSettings) return
-    setTogglingAuto(true)
-    const newVal = !scrapeSettings.auto_scrape_enabled
-    const { error: err } = await supabase
-      .from('scrape_settings')
-      .update({ auto_scrape_enabled: newVal, updated_at: new Date().toISOString() })
-      .neq('id', '00000000-0000-0000-0000-000000000000')
-    setTogglingAuto(false)
-    if (err) setError(`Failed to toggle auto-sync: ${err.message}`)
-  }
-
-  // ── TrackWrestling: manual scrape ──────────────────────────────────────────
-  async function handleScrapeNow() {
-    setScraping(true)
-    setError(null)
-    setResult(null)
-    const body: Record<string, string> = {}
-    if (twUrl.trim() && twUrl.trim() !== scrapeSettings?.trackwrestling_url) {
-      body.tournament_url = twUrl.trim()
-    }
-    const res = await fetch('/api/scores/scrape-trackwrestling', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json()
-    setScraping(false)
-    if (!res.ok) setError(data.error ?? 'Scrape failed')
-    else setResult(data)
-    await loadScrapeSettings()
   }
 
   // ── Model data CSV upload ──────────────────────────────────────────────────
@@ -232,30 +113,6 @@ export default function ScoresPage() {
     </div>
   ) : null
 
-  // ── Status badge for last scrape ───────────────────────────────────────────
-  function ScrapeStatusBadge() {
-    if (!scrapeSettings?.last_scraped_at) {
-      return <span className="text-xs text-gray-500">Never synced</span>
-    }
-    const ago = formatDistanceToNow(new Date(scrapeSettings.last_scraped_at), { addSuffix: true })
-    const isOk = scrapeSettings.last_scrape_status === 'ok'
-    return (
-      <div className="flex flex-col gap-0.5">
-        <div className={`flex items-center gap-1.5 text-xs font-medium ${isOk ? 'text-green-400' : 'text-red-400'}`}>
-          {isOk
-            ? <CheckCircle className="w-3.5 h-3.5" />
-            : <AlertCircle className="w-3.5 h-3.5" />}
-          {isOk ? 'Synced' : 'Error'} · {ago}
-        </div>
-        {scrapeSettings.last_scrape_message && (
-          <div className="text-xs text-gray-500 truncate max-w-xs">
-            {scrapeSettings.last_scrape_message}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
@@ -269,76 +126,6 @@ export default function ScoresPage() {
 
       {ResultBanner}
       {ErrorBanner}
-
-      {/* ── TrackWrestling Live Sync ─────────────────────────────────────────── */}
-      <div className="bg-gray-900 rounded-xl border border-yellow-400/30 p-6 space-y-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="font-semibold text-white flex items-center gap-2">
-              <Zap className="w-4 h-4 text-yellow-400" />
-              TrackWrestling Live Sync
-              <span className="text-xs bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 rounded px-1.5 py-0.5 font-normal">
-                LIVE
-              </span>
-            </h3>
-            <p className="text-sm text-gray-400 mt-1">
-              Paste the tournament bracket URL and scores will be fetched directly
-              from TrackWrestling and pushed to all league members in real time.
-            </p>
-          </div>
-          <ScrapeStatusBadge />
-        </div>
-
-        {/* URL input + Save */}
-        <div className="flex gap-2">
-          <input
-            type="url"
-            value={twUrl}
-            onChange={(e) => setTwUrl(e.target.value)}
-            placeholder="https://www.trackwrestling.com/tw/public/tournaments/TournamentBrackets.jsp?TIM=..."
-            className="flex-1 px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-          />
-          <button
-            onClick={handleSaveUrl}
-            disabled={savingUrl || !twUrl.trim()}
-            className="px-4 py-2.5 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/50 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
-          >
-            {savingUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save URL'}
-          </button>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Sync Now button */}
-          <button
-            onClick={handleScrapeNow}
-            disabled={scraping || (!twUrl.trim() && !scrapeSettings?.trackwrestling_url)}
-            className="flex-1 py-3 bg-yellow-400 hover:bg-yellow-300 disabled:bg-yellow-400/40 text-gray-900 font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            {scraping
-              ? <><Loader2 className="w-4 h-4 animate-spin" />Scraping…</>
-              : <><RefreshCw className="w-4 h-4" />Sync Now</>}
-          </button>
-
-          {/* Auto-sync toggle */}
-          <button
-            onClick={handleToggleAuto}
-            disabled={togglingAuto || !scrapeSettings?.trackwrestling_url}
-            className={`flex items-center gap-2 px-5 py-3 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 ${
-              scrapeSettings?.auto_scrape_enabled
-                ? 'bg-green-700 hover:bg-green-600 text-white'
-                : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
-            }`}
-          >
-            {togglingAuto
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : scrapeSettings?.auto_scrape_enabled
-                ? <ToggleRight className="w-4 h-4" />
-                : <ToggleLeft className="w-4 h-4" />}
-            Auto-sync {scrapeSettings?.auto_scrape_enabled ? 'ON' : 'OFF'}
-          </button>
-        </div>
-
-      </div>
 
       {/* ── CSV Upload ───────────────────────────────────────────────────────── */}
       <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6 space-y-4">
@@ -389,31 +176,6 @@ export default function ScoresPage() {
             </button>
           </div>
         )}
-      </div>
-
-      {/* ── Google Sheets Sync ───────────────────────────────────────────────── */}
-      <div className="bg-gray-900 rounded-xl border border-orange-600/20 p-6 space-y-4">
-        <h3 className="font-semibold text-white flex items-center gap-2">
-          <Link2 className="w-4 h-4 text-yellow-400" />
-          Sync from Google Sheets
-        </h3>
-        <p className="text-sm text-gray-400">
-          Paste a Google Sheet URL. The sheet must be shared with your service account and use the same column format.
-        </p>
-        <input
-          type="url"
-          value={sheetsUrl}
-          onChange={(e) => setSheetsUrl(e.target.value)}
-          placeholder="https://docs.google.com/spreadsheets/d/..."
-          className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
-        />
-        <button
-          onClick={handleSheetsSync}
-          disabled={syncing || !sheetsUrl.trim()}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
-        >
-          {syncing ? <><Loader2 className="w-4 h-4 animate-spin" />Syncing…</> : 'Sync Now'}
-        </button>
       </div>
 
       {/* ── Prediction Model Upload ──────────────────────────────────────────── */}
