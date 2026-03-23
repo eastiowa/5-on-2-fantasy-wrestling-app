@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 
 // PATCH /api/seasons/[id]
 // Supported actions via body:
@@ -115,6 +116,57 @@ export async function PATCH(
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // ── Auto-snapshot final standings when a season is completed ────────────
+    // Reads current draft_picks → scores totals and writes final_placement +
+    // total_points into team_seasons so the Past Seasons page shows them
+    // immediately without the commissioner having to upload results manually.
+    if (status === 'complete') {
+      // 1. Get all teams that participated in this season
+      const { data: teamSeasonRows } = await supabase
+        .from('team_seasons')
+        .select('team_id')
+        .eq('season_id', id)
+
+      const teamIds = (teamSeasonRows ?? []).map((r) => r.team_id)
+
+      if (teamIds.length > 0) {
+        // 2. Fetch every draft pick for those teams + the athlete's score rows
+        const { data: picks } = await supabase
+          .from('draft_picks')
+          .select('team_id, athlete:athletes(scores(total_points))')
+          .in('team_id', teamIds)
+
+        // 3. Sum total_points per team (all teams default to 0 so no team is missed)
+        const teamTotals: Record<string, number> = Object.fromEntries(teamIds.map((tid) => [tid, 0]))
+
+        for (const pick of picks ?? []) {
+          const pts: number = ((pick.athlete as any)?.scores ?? []).reduce(
+            (sum: number, s: any) => sum + (s.total_points ?? 0),
+            0
+          )
+          teamTotals[pick.team_id] = (teamTotals[pick.team_id] ?? 0) + pts
+        }
+
+        // 4. Sort highest → lowest and assign placements 1..N
+        const sorted = Object.entries(teamTotals).sort(([, a], [, b]) => b - a)
+        const placements = sorted.map(([team_id, total_points], i) => ({
+          team_id,
+          season_id: id,
+          final_placement: i + 1,
+          total_points: parseFloat(total_points.toFixed(2)),
+        }))
+
+        await supabase
+          .from('team_seasons')
+          .upsert(placements, { onConflict: 'team_id,season_id' })
+      }
+
+      // Bust ISR caches so Past Seasons and home standings reflect immediately
+      revalidatePath('/past-seasons')
+      revalidatePath('/')
+    }
+
     return NextResponse.json(data)
   }
 
