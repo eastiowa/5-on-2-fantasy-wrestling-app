@@ -23,6 +23,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fetchTrackWrestlingScores } from '@/lib/trackwrestling'
+import { revalidatePath } from 'next/cache'
 
 export async function POST(req: Request) {
   // ── 1. Authorise ───────────────────────────────────────────────────────────
@@ -218,6 +219,12 @@ export async function POST(req: Request) {
       // Non-fatal — projections will just be stale until the next scrape
       console.warn('[scrape-trackwrestling] projection recalculate fire-and-forget failed:', err)
     })
+  }
+
+  // Bust the ISR cache so standings reflect the new scores immediately
+  if (upserted.length > 0) {
+    revalidatePath('/')
+    revalidatePath('/teams', 'layout')
   }
 
   return NextResponse.json({

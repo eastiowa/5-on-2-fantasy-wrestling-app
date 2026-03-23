@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { parseCumulativeScoreCSV } from '@/lib/scoring'
+import { revalidatePath } from 'next/cache'
 
 /**
  * POST /api/scores/upload
@@ -115,6 +116,10 @@ export async function POST(req: Request) {
       errors.push(`Failed to save score for "${row.name}": ${insertErr.message}`)
     }
   }
+
+  // Bust the ISR cache so standings reflect the new scores immediately
+  revalidatePath('/')
+  revalidatePath('/teams', 'layout')
 
   return NextResponse.json({
     success: true,
